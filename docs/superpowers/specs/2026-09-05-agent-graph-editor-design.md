@@ -234,3 +234,17 @@ src/renderer/components/ TopBar.tsx  Canvas.tsx  AgentNodeCard.tsx  GraphEdgeVie
                          Inspector.tsx  NodeInspector.tsx  EdgeInspector.tsx  ToolPicker.tsx
                          RunConsole.tsx  SettingsDialog.tsx  ModelCombo.tsx
 ```
+
+## Deviations recorded during implementation
+
+These were chosen deliberately while building and reviewing the branch; treat them as the current contract.
+
+- Exposed MCP tool names use the server **name** as the prefix (`FreeCAD__create_object`), not the server id. Names read better to a model, and grants store raw tool names so renaming a server does not break a graph. Collisions still get numeric suffixes.
+- `StopReason` includes `refusal`; the engine treats it as an execution error.
+- `RunEvent` includes `run.warning` (per-run, de-duplicated) for MCP listing problems such as unconfigured or unreachable servers. MCP tool listings are cached per run, so a cyclic graph lists each server once.
+- A delegate call with a missing or empty `task` does not run the child; the model receives an `isError` tool result saying the argument is required. An empty handoff message is replaced by `(no output)` so providers never receive an empty user message.
+- Handoff target labels are trimmed, and lookups fall back to a trimmed, case-insensitive match.
+- Per-node `maxTurns` and `maxTokens` are clamped to at least 1 at run time, and out-of-range values are dropped when a file is loaded.
+- The top bar has a New action (⌘N) in addition to Open and Save. Opening a file fits the view to the loaded graph.
+- The unsaved-changes prompt on close is shown by the main process (`will-prevent-unload` plus a native message box) because Chromium suppresses `window.confirm` inside `beforeunload`.
+- The top-bar Run button always opens the console; with an empty input it focuses the input and shows a hint instead of doing nothing.
