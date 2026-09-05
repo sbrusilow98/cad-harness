@@ -50,12 +50,19 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
 
   async updateSettings(patch) {
+    const previousServers = get().settings?.mcpServers ?? []
     const settings = await window.api.updateSettings(patch)
     applyTheme(settings.theme)
     const toolCache = { ...get().toolCache }
     if (patch.mcpServers) {
       for (const id of Object.keys(toolCache)) {
-        if (!settings.mcpServers.some((s) => s.id === id)) delete toolCache[id]
+        const next = settings.mcpServers.find((s) => s.id === id)
+        if (!next) {
+          delete toolCache[id]
+          continue
+        }
+        const prev = previousServers.find((s) => s.id === id)
+        if (prev && JSON.stringify(prev) !== JSON.stringify(next)) delete toolCache[id]
       }
     }
     set({ settings, toolCache })
@@ -96,10 +103,19 @@ export const useUiStore = create<UiState>((set, get) => ({
     const existing = get().toolCache[serverId]
     if (!force && existing && existing.status !== 'error') return
     set({ toolCache: { ...get().toolCache, [serverId]: { status: 'loading', tools: existing?.tools ?? [] } } })
-    const result = await window.api.listMcpTools(serverId)
-    const entry: ToolCacheEntry = result.ok
-      ? { status: 'ready', tools: result.tools }
-      : { status: 'error', tools: existing?.tools ?? [], error: result.error }
-    set({ toolCache: { ...get().toolCache, [serverId]: entry } })
+    try {
+      const result = await window.api.listMcpTools(serverId)
+      const entry: ToolCacheEntry = result.ok
+        ? { status: 'ready', tools: result.tools }
+        : { status: 'error', tools: existing?.tools ?? [], error: result.error }
+      set({ toolCache: { ...get().toolCache, [serverId]: entry } })
+    } catch (err) {
+      set({
+        toolCache: {
+          ...get().toolCache,
+          [serverId]: { status: 'error', tools: existing?.tools ?? [], error: describeError(err) }
+        }
+      })
+    }
   }
 }))

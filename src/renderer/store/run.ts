@@ -62,6 +62,18 @@ function updateExecution(state: RunState, executionId: string, fn: (e: Execution
   return { ...state, executions }
 }
 
+/**
+ * Derives a node's overall status from all of its executions. A node can have
+ * multiple concurrent executions (e.g. self-delegation), so it should keep
+ * reporting `running` as long as any execution of it is still active, even
+ * when the execution that just finished or errored was a different one.
+ */
+export function deriveNodeStatus(executions: ExecutionView[], nodeId: string, fallback: NodeStatus): NodeStatus {
+  const forNode = executions.filter((e) => e.nodeId === nodeId)
+  if (forNode.some((e) => e.status === 'running')) return 'running'
+  return fallback
+}
+
 export function applyRunEvent(state: RunState, event: RunEvent): RunState {
   if (event.type === 'run.started') {
     return { ...initialRunState, runId: event.runId, status: 'running' }
@@ -105,12 +117,16 @@ export function applyRunEvent(state: RunState, event: RunEvent): RunState {
     case 'node.finished': {
       const next = updateExecution(state, event.executionId, (e) => ({ ...e, status: 'done', output: event.output }))
       const exec = next.executions.find((e) => e.executionId === event.executionId)
-      return exec ? { ...next, nodeStatus: { ...next.nodeStatus, [exec.nodeId]: 'done' } } : next
+      if (!exec) return next
+      const nodeStatus = deriveNodeStatus(next.executions, exec.nodeId, 'done')
+      return { ...next, nodeStatus: { ...next.nodeStatus, [exec.nodeId]: nodeStatus } }
     }
     case 'node.error': {
       const next = updateExecution(state, event.executionId, (e) => ({ ...e, status: 'error', error: event.error }))
       const exec = next.executions.find((e) => e.executionId === event.executionId)
-      return exec ? { ...next, nodeStatus: { ...next.nodeStatus, [exec.nodeId]: 'error' } } : next
+      if (!exec) return next
+      const nodeStatus = deriveNodeStatus(next.executions, exec.nodeId, 'error')
+      return { ...next, nodeStatus: { ...next.nodeStatus, [exec.nodeId]: nodeStatus } }
     }
     case 'edge.traversed': {
       const next = updateExecution(state, event.fromExecutionId, (e) => ({

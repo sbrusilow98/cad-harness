@@ -52,6 +52,20 @@ describe('applyRunEvent', () => {
     expect(cancelled.status).toBe('cancelled')
   })
 
+  it('keeps a node running while another execution of it is still active', () => {
+    const state = play([
+      { type: 'run.started', runId: 'r' },
+      { type: 'node.started', runId: 'r', executionId: 'outer', nodeId: 'a', parentExecutionId: null, input: 'x', depth: 0 },
+      { type: 'node.started', runId: 'r', executionId: 'inner', nodeId: 'a', parentExecutionId: 'outer', input: 'y', depth: 1 },
+      { type: 'node.finished', runId: 'r', executionId: 'inner', output: 'inner done' }
+    ])
+    expect(state.nodeStatus).toEqual({ a: 'running' })
+    const finished = applyRunEvent(state, { type: 'node.finished', runId: 'r', executionId: 'outer', output: 'outer done' })
+    expect(finished.nodeStatus).toEqual({ a: 'done' })
+    const errored = applyRunEvent(state, { type: 'node.error', runId: 'r', executionId: 'outer', error: 'boom' })
+    expect(errored.nodeStatus).toEqual({ a: 'error' })
+  })
+
   it('ignores events from other runs and resets on a new run', () => {
     const state = play([
       { type: 'run.started', runId: 'r1' },
