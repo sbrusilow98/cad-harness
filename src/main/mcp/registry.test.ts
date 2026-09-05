@@ -3,10 +3,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { z } from 'zod'
-import { McpRegistry, summarizeResult } from './registry'
+import { McpRegistry, summarizeResult, buildStdioEnv } from './registry'
 import type { McpServerConfig } from '@shared/types'
 
 let connections = 0
+let lastServerTransport: InMemoryTransport | null = null
 
 function makeTransport(): Transport {
   connections++
@@ -19,6 +20,7 @@ function makeTransport(): Transport {
     isError: true
   }))
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  lastServerTransport = serverTransport
   void server.connect(serverTransport)
   return clientTransport
 }
@@ -67,6 +69,30 @@ describe('McpRegistry', () => {
     await expect(registry.listTools('s1')).rejects.toThrow(/not configured/)
     expect(connections).toBe(1)
   })
+
+  it('reconnects after the server side closes the transport', async () => {
+    connections = 0
+    const registry = new McpRegistry(() => [config], makeTransport)
+    await registry.listTools('s1')
+    await lastServerTransport!.close()
+    await new Promise((r) => setTimeout(r, 0))
+    await registry.listTools('s1')
+    expect(connections).toBe(2)
+    await registry.closeAll()
+  })
+
+  it('retries the connection after a failed attempt', async () => {
+    let calls = 0
+    const flaky = (): Transport => {
+      calls++
+      if (calls === 1) throw new Error('spawn failed')
+      return makeTransport()
+    }
+    const registry = new McpRegistry(() => [config], flaky)
+    await expect(registry.listTools('s1')).rejects.toThrow('spawn failed')
+    expect((await registry.listTools('s1')).map((t) => t.name)).toEqual(['echo', 'fail'])
+    await registry.closeAll()
+  })
 })
 
 describe('summarizeResult', () => {
@@ -89,5 +115,26 @@ describe('summarizeResult', () => {
   it('handles empty and malformed results', () => {
     expect(summarizeResult({})).toEqual({ content: '', isError: false })
     expect(summarizeResult(null)).toEqual({ content: '', isError: false })
+  })
+
+  it('reports a placeholder message for an error with no text', () => {
+    expect(summarizeResult({ isError: true, content: [] })).toEqual({ content: 'Tool call failed with no error message.', isError: true })
+  })
+})
+
+describe('buildStdioEnv', () => {
+  it('extends PATH and lets config values win', () => {
+    const env = buildStdioEnv({ FOO: '2', PATH: '/custom' }, { PATH: '/bin', FOO: '1', HOME: '/Users/x' })
+    expect(env).toEqual({ PATH: '/custom', FOO: '2', HOME: '/Users/x' })
+  })
+
+  it('appends tool directories to PATH', () => {
+    const env = buildStdioEnv(undefined, { PATH: '/bin', HOME: '/Users/x' })
+    expect(env['PATH']).toBe('/bin:/usr/local/bin:/opt/homebrew/bin:/Users/x/.local/bin:/Users/x/.cargo/bin')
+  })
+
+  it('omits home-relative directories when HOME is unset and drops non-string values', () => {
+    const env = buildStdioEnv(undefined, { PATH: '', X: undefined })
+    expect(env).toEqual({ PATH: '/usr/local/bin:/opt/homebrew/bin' })
   })
 })

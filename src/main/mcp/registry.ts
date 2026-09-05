@@ -9,15 +9,23 @@ import type { ToolRef } from './naming'
 export type TransportFactory = (config: McpServerConfig) => Transport
 
 const TOOL_CALL_TIMEOUT_MS = 10 * 60 * 1000
-const EXTRA_PATH = ['/usr/local/bin', '/opt/homebrew/bin', `${process.env['HOME'] ?? ''}/.local/bin`, `${process.env['HOME'] ?? ''}/.cargo/bin`]
+
+export function buildStdioEnv(configEnv: Record<string, string> | undefined, base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(base)) if (typeof value === 'string') env[key] = value
+  const extraPath = ['/usr/local/bin', '/opt/homebrew/bin']
+  if (typeof base.HOME === 'string' && base.HOME.length > 0) extraPath.push(`${base.HOME}/.local/bin`, `${base.HOME}/.cargo/bin`)
+  env['PATH'] = [env['PATH'] ?? '', ...extraPath].filter(Boolean).join(':')
+  Object.assign(env, configEnv ?? {})
+  return env
+}
 
 export function defaultTransportFactory(config: McpServerConfig): Transport {
   if (config.transport === 'stdio') {
-    const env: Record<string, string> = {}
-    for (const [key, value] of Object.entries(process.env)) if (typeof value === 'string') env[key] = value
-    env['PATH'] = [env['PATH'] ?? '', ...EXTRA_PATH].filter(Boolean).join(':')
-    Object.assign(env, config.env ?? {})
-    return new StdioClientTransport({ command: config.command, args: config.args, env, stderr: 'pipe' })
+    const env = buildStdioEnv(config.env)
+    const transport = new StdioClientTransport({ command: config.command, args: config.args, env, stderr: 'pipe' })
+    transport.stderr?.on('data', (chunk: Buffer) => console.error(`[mcp ${config.name}]`, String(chunk).trimEnd()))
+    return transport
   }
   return new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers ?? {} } })
 }
@@ -51,7 +59,9 @@ export function summarizeResult(result: unknown): ToolCallOutcome {
     }
   }
   if (texts.length === 0 && r.structuredContent !== undefined) texts.push(JSON.stringify(r.structuredContent))
-  return { content: texts.join('\n'), isError: r.isError === true }
+  const isError = r.isError === true
+  if (isError && texts.length === 0) texts.push('Tool call failed with no error message.')
+  return { content: texts.join('\n'), isError }
 }
 
 export class McpRegistry {
@@ -64,13 +74,13 @@ export class McpRegistry {
 
   private configFor(serverId: string): McpServerConfig {
     const config = this.getConfigs().find((c) => c.id === serverId)
-    if (!config) throw new Error('MCP server is not configured.')
+    if (!config) throw new Error(`MCP server "${serverId}" is not configured.`)
     return config
   }
 
-  private async connect(config: McpServerConfig): Promise<Client> {
+  private async connect(config: McpServerConfig, options?: { timeout: number }): Promise<Client> {
     const client = new Client({ name: 'agent-graph', version: '0.1.0' })
-    await client.connect(this.transportFactory(config))
+    await client.connect(this.transportFactory(config), options)
     return client
   }
 
@@ -78,10 +88,17 @@ export class McpRegistry {
     const existing = this.clients.get(serverId)
     if (existing) return existing
     const config = this.configFor(serverId)
-    const pending = this.connect(config).catch((err: unknown) => {
-      this.clients.delete(serverId)
-      throw err
-    })
+    const pending: Promise<Client> = this.connect(config)
+      .then((client) => {
+        client.onclose = () => {
+          if (this.clients.get(serverId) === pending) this.clients.delete(serverId)
+        }
+        return client
+      })
+      .catch((err: unknown) => {
+        if (this.clients.get(serverId) === pending) this.clients.delete(serverId)
+        throw err
+      })
     this.clients.set(serverId, pending)
     return pending
   }
@@ -114,7 +131,7 @@ export class McpRegistry {
   }
 
   async test(config: McpServerConfig): Promise<McpToolInfo[]> {
-    const client = await this.connect(config)
+    const client = await this.connect(config, { timeout: 15000 })
     try {
       return await this.toolsOf(client, config)
     } finally {
@@ -135,6 +152,6 @@ export class McpRegistry {
   }
 
   async closeAll(): Promise<void> {
-    for (const id of [...this.clients.keys()]) await this.invalidate(id)
+    await Promise.all([...this.clients.keys()].map((id) => this.invalidate(id)))
   }
 }
