@@ -99,8 +99,12 @@ export function finishAccumulator(acc: ChunkAccumulator): ChatResponse {
   return { parts, stopReason }
 }
 
+const CHAT_MODEL_PREFIX = /^(gpt-|chatgpt-|o\d)/
+const NON_CHAT_MODALITY = /(audio|realtime|tts|transcribe|image|embedding|moderation|instruct|-search)/
+
 export function isOpenAIChatModel(id: string): boolean {
-  return /^(gpt-|o\d)/.test(id) && !/(audio|realtime|tts|transcribe|image|embedding|moderation|instruct|search)/.test(id)
+  const base = id.startsWith('ft:') ? id.slice(3).split(':')[0] : id
+  return CHAT_MODEL_PREFIX.test(base) && !NON_CHAT_MODALITY.test(base)
 }
 
 export function createOpenAICompatibleProvider(opts: OpenAICompatibleOptions): ChatProvider {
