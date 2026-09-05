@@ -60,7 +60,6 @@ export function RunConsole() {
   const run = useRunStore()
   const graph = useGraphStore((s) => s.graph)
   const [input, setInput] = useState('')
-  const [runId, setRunId] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -72,15 +71,16 @@ export function RunConsole() {
     if (!text || useRunStore.getState().status === 'running') return
     setStartError(null)
     try {
-      setRunId(await window.api.startRun(useGraphStore.getState().graph, text))
+      await window.api.startRun(useGraphStore.getState().graph, text)
     } catch (err) {
       setStartError(describeError(err))
     }
   }, [input])
 
   const stop = useCallback(() => {
-    if (runId) void window.api.stopRun(runId)
-  }, [runId])
+    const id = useRunStore.getState().runId
+    if (id) void window.api.stopRun(id)
+  }, [])
 
   useEffect(() => {
     const handler = (): void => {
