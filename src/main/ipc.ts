@@ -36,6 +36,22 @@ function summary(tool: McpToolInfo): McpToolSummary {
   return { name: tool.name, description: tool.description }
 }
 
+function connectionKey(config: McpServerConfig): string {
+  if (config.transport === 'stdio') {
+    return JSON.stringify({
+      transport: config.transport,
+      command: config.command,
+      args: config.args,
+      env: config.env
+    })
+  }
+  return JSON.stringify({
+    transport: config.transport,
+    url: config.url,
+    headers: config.headers
+  })
+}
+
 async function collectMcpTools(ctx: MainContext, grants: ToolGrant[]): Promise<{ tools: McpToolInfo[]; warnings: string[] }> {
   const tools: McpToolInfo[] = []
   const warnings: string[] = []
@@ -43,7 +59,7 @@ async function collectMcpTools(ctx: MainContext, grants: ToolGrant[]): Promise<{
   for (const serverId of new Set(grants.map((g) => g.serverId))) {
     const config = configured.find((s) => s.id === serverId)
     if (!config) {
-      warnings.push('A node references an MCP server that is no longer configured; its tools were skipped.')
+      warnings.push(`A node references MCP server "${serverId}", which is no longer configured; its tools were skipped.`)
       continue
     }
     try {
@@ -90,13 +106,18 @@ export function registerIpc(ctx: MainContext): void {
     const after = ctx.settings.update(patch)
     for (const old of before.mcpServers) {
       const now = after.mcpServers.find((s) => s.id === old.id)
-      if (!now || JSON.stringify(now) !== JSON.stringify(old)) void ctx.mcp.invalidate(old.id)
+      if (!now || connectionKey(now) !== connectionKey(old)) void ctx.mcp.invalidate(old.id)
     }
     return after
   })
 
   ipcMain.handle(IPC.setSecret, (_event, provider: ProviderId, key: string) => {
-    ctx.secrets.set(provider, key.trim())
+    const trimmed = key.trim()
+    if (!trimmed) {
+      ctx.secrets.clear(provider)
+    } else {
+      ctx.secrets.set(provider, trimmed)
+    }
   })
   ipcMain.handle(IPC.hasSecret, (_event, provider: ProviderId) => ctx.secrets.has(provider))
   ipcMain.handle(IPC.clearSecret, (_event, provider: ProviderId) => {
@@ -139,7 +160,9 @@ export function registerIpc(ctx: MainContext): void {
       limits: ctx.settings.get().limits,
       emit
     }
-    void runGraph({ runId, graph, input, signal: controller.signal, deps }).finally(() => runs.delete(runId))
+    void runGraph({ runId, graph, input, signal: controller.signal, deps })
+      .catch(() => undefined)
+      .finally(() => runs.delete(runId))
     return runId
   })
 

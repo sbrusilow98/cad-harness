@@ -48,8 +48,12 @@ void app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(settings.get().theme)
   })
-  app.on('before-quit', () => {
-    void mcp.closeAll()
+  let quitting = false
+  app.on('before-quit', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    quitting = true
+    void mcp.closeAll().finally(() => app.quit())
   })
 })
 
