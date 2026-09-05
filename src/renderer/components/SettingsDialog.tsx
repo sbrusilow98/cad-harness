@@ -42,9 +42,14 @@ function KeysTab() {
   }
 
   const clear = async (id: ProviderId): Promise<void> => {
-    await window.api.clearSecret(id)
-    void useUiStore.getState().fetchModels(id, true)
-    await refresh()
+    setError(null)
+    try {
+      await window.api.clearSecret(id)
+      void useUiStore.getState().fetchModels(id, true)
+      await refresh()
+    } catch (err) {
+      setError(describeError(err))
+    }
   }
 
   return (
@@ -116,9 +121,14 @@ function ServerForm({ initial, onSave, onCancel }: FormProps) {
   const test = async (): Promise<void> => {
     setTesting(true)
     setTestResult(null)
-    const result = await window.api.testMcpServer(build())
-    setTestResult(result.ok ? { tools: result.tools } : { error: result.error })
-    setTesting(false)
+    try {
+      const result = await window.api.testMcpServer(build())
+      setTestResult(result.ok ? { tools: result.tools } : { error: result.error })
+    } catch (err) {
+      setTestResult({ error: describeError(err) })
+    } finally {
+      setTesting(false)
+    }
   }
 
   return (
@@ -193,8 +203,18 @@ function ServerForm({ initial, onSave, onCancel }: FormProps) {
 function McpTab() {
   const servers = useUiStore((s) => s.settings?.mcpServers ?? [])
   const [editing, setEditing] = useState<{ config: McpServerConfig; isNew: boolean } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const persist = (list: McpServerConfig[]): Promise<void> => useUiStore.getState().updateSettings({ mcpServers: list })
+  const persist = async (list: McpServerConfig[]): Promise<boolean> => {
+    try {
+      await useUiStore.getState().updateSettings({ mcpServers: list })
+      setError(null)
+      return true
+    } catch (err) {
+      setError(describeError(err))
+      return false
+    }
+  }
 
   if (editing) {
     return (
@@ -202,8 +222,8 @@ function McpTab() {
         initial={editing.config}
         onCancel={() => setEditing(null)}
         onSave={async (config) => {
-          await persist(editing.isNew ? [...servers, config] : servers.map((s) => (s.id === config.id ? config : s)))
-          setEditing(null)
+          const ok = await persist(editing.isNew ? [...servers, config] : servers.map((s) => (s.id === config.id ? config : s)))
+          if (ok) setEditing(null)
         }}
       />
     )
@@ -211,6 +231,7 @@ function McpTab() {
 
   return (
     <>
+      {error && <div className="error-text" style={{ marginBottom: 12 }}>{error}</div>}
       {servers.length === 0 && (
         <div className="small muted" style={{ marginBottom: 12 }}>
           No MCP servers yet. Add a local command (stdio) or a remote URL (streamable HTTP).
@@ -251,9 +272,17 @@ function McpTab() {
 
 function LimitsTab() {
   const limits = useUiStore((s) => s.settings?.limits)
+  const [error, setError] = useState<string | null>(null)
   if (!limits) return null
   const set = (patch: Partial<RunLimits>): void => {
-    void useUiStore.getState().updateSettings({ limits: { ...limits, ...patch } })
+    void (async () => {
+      try {
+        await useUiStore.getState().updateSettings({ limits: { ...limits, ...patch } })
+        setError(null)
+      } catch (err) {
+        setError(describeError(err))
+      }
+    })()
   }
   const field = (key: keyof RunLimits, label: string, help: string) => (
     <div className="field" key={key}>
@@ -276,6 +305,7 @@ function LimitsTab() {
       {field('maxTurns', 'Max turns per agent', 'Model calls one agent may make in a single execution before the run stops. Nodes can override this.')}
       {field('maxDelegationDepth', 'Max delegation depth', 'How deep delegate calls may nest.')}
       {field('maxTotalSteps', 'Max total steps per run', 'Total model calls across the whole run. Guarantees cyclic graphs terminate.')}
+      {error && <div className="error-text">{error}</div>}
     </>
   )
 }
