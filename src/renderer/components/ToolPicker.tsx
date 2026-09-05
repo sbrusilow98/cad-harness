@@ -13,6 +13,7 @@ export function ToolPicker({ node }: Props) {
   const fetchTools = useUiStore((s) => s.fetchTools)
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [remembered, setRemembered] = useState<Record<string, string[]>>({})
 
   const updateTools = (tools: ToolGrant[]): void => useGraphStore.getState().updateNode(node.id, { tools })
   const setGrant = (serverId: string, grant: ToolGrant | null): void => {
@@ -59,12 +60,15 @@ export function ToolPicker({ node }: Props) {
                 <input
                   type="checkbox"
                   checked={all}
-                  onChange={(e) =>
-                    setGrant(
-                      server.id,
-                      e.target.checked ? { serverId: server.id, names: '*' } : names.length > 0 ? { serverId: server.id, names } : null
-                    )
-                  }
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setRemembered({ ...remembered, [server.id]: names })
+                      setGrant(server.id, { serverId: server.id, names: '*' })
+                    } else {
+                      const restore = remembered[server.id] ?? []
+                      setGrant(server.id, restore.length > 0 ? { serverId: server.id, names: restore } : null)
+                    }
+                  }}
                 />
                 all
               </label>
@@ -91,6 +95,7 @@ export function ToolPicker({ node }: Props) {
                         disabled={all}
                         onChange={(e) => {
                           const next = e.target.checked ? [...names, tool.name] : names.filter((n) => n !== tool.name)
+                          setRemembered({ ...remembered, [server.id]: next })
                           setGrant(server.id, next.length > 0 ? { serverId: server.id, names: next } : null)
                         }}
                       />

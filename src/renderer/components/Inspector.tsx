@@ -13,7 +13,7 @@ export function Inspector() {
     if (!node) return null
     return (
       <aside className="inspector">
-        <NodeInspector node={node} />
+        <NodeInspector key={node.id} node={node} />
       </aside>
     )
   }
@@ -22,7 +22,7 @@ export function Inspector() {
   if (!edge) return null
   return (
     <aside className="inspector">
-      <EdgeInspector edge={edge} />
+      <EdgeInspector key={edge.id} edge={edge} />
     </aside>
   )
 }
