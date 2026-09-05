@@ -650,3 +650,18 @@ input[type='checkbox'] {
   flex: 1;
   min-width: 0;
 }
+
+/* Inspector additions */
+.tool-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.number-field {
+  flex: 1;
+  min-width: 0;
+}
+.number-field input {
+  width: 100%;
+}

@@ -3,6 +3,7 @@ import '@/styles/theme.css'
 import '@/styles/app.css'
 import { useUiStore } from '@/store/ui'
 import { Canvas } from '@/components/Canvas'
+import { Inspector } from '@/components/Inspector'
 
 export default function App() {
   const loadSettings = useUiStore((s) => s.loadSettings)
@@ -14,6 +15,7 @@ export default function App() {
     <div className="app">
       <header className="topbar" />
       <Canvas />
+      <Inspector />
     </div>
   )
 }
