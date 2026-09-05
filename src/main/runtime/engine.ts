@@ -11,7 +11,7 @@ export { errorMessage } from '@shared/errors'
 export interface EngineDeps {
   getProvider(id: ProviderId): ChatProvider
   getApiKey(id: ProviderId): Promise<string | null>
-  listMcpTools(grants: ToolGrant[]): Promise<{ tools: McpToolInfo[]; warnings: string[] }>
+  listMcpTools(grants: ToolGrant[], signal: AbortSignal): Promise<McpListing>
   callMcpTool(ref: ToolRef, args: unknown, signal: AbortSignal): Promise<{ content: string; isError: boolean }>
   limits: RunLimits
   emit(event: RunEvent): void
@@ -33,6 +33,11 @@ class RunCancelled extends Error {
 
 class RunLimitReached extends Error {}
 
+export interface McpListing {
+  tools: McpToolInfo[]
+  warnings: string[]
+}
+
 interface RunContext {
   runId: string
   graph: Graph
@@ -41,6 +46,8 @@ interface RunContext {
   steps: number
   registry: ToolNameRegistry
   nodesById: Map<string, AgentNode>
+  listings: Map<string, McpListing>
+  warned: Set<string>
 }
 
 interface NodeResult {
@@ -70,7 +77,9 @@ export async function runGraph(opts: RunOptions): Promise<void> {
     deps,
     steps: 0,
     registry: new ToolNameRegistry(),
-    nodesById: new Map(graph.nodes.map((n) => [n.id, n]))
+    nodesById: new Map(graph.nodes.map((n) => [n.id, n])),
+    listings: new Map(),
+    warned: new Set()
   }
 
   try {
@@ -84,6 +93,31 @@ export async function runGraph(opts: RunOptions): Promise<void> {
       deps.emit({ type: 'run.error', runId, error: errorMessage(err) })
     }
   }
+}
+
+const NO_OUTPUT = '(no output)'
+
+function listingKey(node: AgentNode): string {
+  return [...new Set(node.tools.map((g) => g.serverId))].sort().join(',')
+}
+
+async function listMcpToolsCached(ctx: RunContext, node: AgentNode): Promise<McpListing> {
+  const key = listingKey(node)
+  const cached = ctx.listings.get(key)
+  if (cached) return cached
+  const listing = await ctx.deps.listMcpTools(node.tools, ctx.signal)
+  ctx.listings.set(key, listing)
+  return listing
+}
+
+function resolveHandoffTarget(targets: Map<string, GraphEdge>, target: string): GraphEdge | undefined {
+  const exact = targets.get(target)
+  if (exact) return exact
+  const wanted = target.trim().toLowerCase()
+  for (const [label, edge] of targets) {
+    if (label.trim().toLowerCase() === wanted) return edge
+  }
+  return undefined
 }
 
 function throwIfCancelled(ctx: RunContext): void {
@@ -132,12 +166,21 @@ async function executeNode(
     if (!apiKey) throw new Error(`No API key configured for ${node.provider}. Add one in Settings.`)
     const provider = deps.getProvider(node.provider)
 
-    const { tools: available, warnings } = await deps.listMcpTools(node.tools)
-    for (const message of warnings) deps.emit({ type: 'run.warning', runId, message })
-    const toolSet = buildNodeToolSet(ctx.graph, node, available, ctx.registry)
+    const listing = await listMcpToolsCached(ctx, node)
+    throwIfCancelled(ctx)
+    for (const message of listing.warnings) {
+      if (ctx.warned.has(message)) continue
+      ctx.warned.add(message)
+      deps.emit({ type: 'run.warning', runId, message })
+    }
+    const toolSet = buildNodeToolSet(ctx.graph, node, listing.tools, ctx.registry)
 
     const messages: Message[] = [{ role: 'user', content: input }]
-    const maxTurns = node.maxTurns ?? deps.limits.maxTurns
+    const maxTurns = Math.max(1, Math.floor(node.maxTurns ?? deps.limits.maxTurns))
+    const maxTokens =
+      typeof node.maxTokens === 'number' && Number.isFinite(node.maxTokens) && node.maxTokens >= 1
+        ? Math.floor(node.maxTokens)
+        : undefined
 
     for (let turn = 0; turn < maxTurns; turn++) {
       throwIfCancelled(ctx)
@@ -153,7 +196,7 @@ async function executeNode(
           messages: [...messages],
           tools: toolSet.defs,
           temperature: node.temperature,
-          maxTokens: node.maxTokens,
+          maxTokens,
           signal: ctx.signal
         },
         (delta) => deps.emit({ type: 'node.text', runId, executionId, delta })
@@ -173,7 +216,7 @@ async function executeNode(
         return {
           executionId,
           output: text,
-          handoff: toolSet.autoHandoff ? { edge: toolSet.autoHandoff, message: text } : undefined
+          handoff: toolSet.autoHandoff ? { edge: toolSet.autoHandoff, message: text || NO_OUTPUT } : undefined
         }
       }
 
@@ -183,14 +226,14 @@ async function executeNode(
 
         if (call.name === HANDOFF_TOOL && toolSet.handoffTargets) {
           const target = String(call.args['target'] ?? '')
-          const edge = toolSet.handoffTargets.get(target)
+          const edge = resolveHandoffTarget(toolSet.handoffTargets, target)
           if (!edge) {
             const content = `Unknown handoff target "${target}". Valid targets: ${[...toolSet.handoffTargets.keys()].join(', ')}.`
             deps.emit({ type: 'node.tool.result', runId, executionId, callId: call.id, content, isError: true })
             results.push({ callId: call.id, content, isError: true })
             continue
           }
-          const message = String(call.args['message'] ?? text)
+          const message = String(call.args['message'] ?? '') || text || NO_OUTPUT
           deps.emit({
             type: 'node.tool.result',
             runId,
@@ -235,11 +278,14 @@ async function executeToolCall(
 ): Promise<{ content: string; isError: boolean }> {
   const delegateEdge = toolSet.delegates.get(call.name)
   if (delegateEdge) {
+    const task = String(call.args['task'] ?? '')
+    if (!task.trim()) {
+      return { content: 'The "task" argument is required and must be a non-empty string.', isError: true }
+    }
     if (depth + 1 > ctx.deps.limits.maxDelegationDepth) {
       throw new RunLimitReached(`Delegation depth limit (${ctx.deps.limits.maxDelegationDepth}) reached.`)
     }
     const child = ctx.nodesById.get(delegateEdge.target)!
-    const task = String(call.args['task'] ?? '')
     ctx.deps.emit({
       type: 'edge.traversed',
       runId: ctx.runId,

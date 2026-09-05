@@ -37,6 +37,12 @@ describe('McpRegistry', () => {
     await registry.closeAll()
   })
 
+  it('aborts a tool listing when the signal is already cancelled', async () => {
+    const registry = new McpRegistry(() => [config], makeTransport)
+    await expect(registry.listTools('s1', AbortSignal.abort())).rejects.toThrow()
+    await registry.closeAll()
+  })
+
   it('reuses one connection per server', async () => {
     connections = 0
     const registry = new McpRegistry(() => [config], makeTransport)

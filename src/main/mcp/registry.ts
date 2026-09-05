@@ -9,6 +9,7 @@ import type { ToolRef } from './naming'
 export type TransportFactory = (config: McpServerConfig) => Transport
 
 const TOOL_CALL_TIMEOUT_MS = 10 * 60 * 1000
+const CONNECT_TIMEOUT_MS = 15000
 
 export function buildStdioEnv(configEnv: Record<string, string> | undefined, base: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const env: Record<string, string> = {}
@@ -88,7 +89,7 @@ export class McpRegistry {
     const existing = this.clients.get(serverId)
     if (existing) return existing
     const config = this.configFor(serverId)
-    const pending: Promise<Client> = this.connect(config)
+    const pending: Promise<Client> = this.connect(config, { timeout: CONNECT_TIMEOUT_MS })
       .then((client) => {
         client.onclose = () => {
           if (this.clients.get(serverId) === pending) this.clients.delete(serverId)
@@ -103,8 +104,8 @@ export class McpRegistry {
     return pending
   }
 
-  private async toolsOf(client: Client, config: McpServerConfig): Promise<McpToolInfo[]> {
-    const { tools } = await client.listTools()
+  private async toolsOf(client: Client, config: McpServerConfig, signal?: AbortSignal): Promise<McpToolInfo[]> {
+    const { tools } = await client.listTools(undefined, { signal })
     return tools.map((t) => ({
       serverId: config.id,
       serverName: config.name,
@@ -114,10 +115,10 @@ export class McpRegistry {
     }))
   }
 
-  async listTools(serverId: string): Promise<McpToolInfo[]> {
+  async listTools(serverId: string, signal?: AbortSignal): Promise<McpToolInfo[]> {
     const config = this.configFor(serverId)
     const client = await this.clientFor(serverId)
-    return this.toolsOf(client, config)
+    return this.toolsOf(client, config, signal)
   }
 
   async callTool(ref: ToolRef, args: unknown, signal?: AbortSignal): Promise<ToolCallOutcome> {
@@ -131,7 +132,7 @@ export class McpRegistry {
   }
 
   async test(config: McpServerConfig): Promise<McpToolInfo[]> {
-    const client = await this.connect(config, { timeout: 15000 })
+    const client = await this.connect(config, { timeout: CONNECT_TIMEOUT_MS })
     try {
       return await this.toolsOf(client, config)
     } finally {

@@ -53,7 +53,7 @@ function connectionKey(config: McpServerConfig): string {
   })
 }
 
-async function collectMcpTools(ctx: MainContext, grants: ToolGrant[]): Promise<{ tools: McpToolInfo[]; warnings: string[] }> {
+async function collectMcpTools(ctx: MainContext, grants: ToolGrant[], signal?: AbortSignal): Promise<{ tools: McpToolInfo[]; warnings: string[] }> {
   const tools: McpToolInfo[] = []
   const warnings: string[] = []
   const configured = ctx.settings.get().mcpServers
@@ -64,7 +64,7 @@ async function collectMcpTools(ctx: MainContext, grants: ToolGrant[]): Promise<{
       continue
     }
     try {
-      tools.push(...(await ctx.mcp.listTools(serverId)))
+      tools.push(...(await ctx.mcp.listTools(serverId, signal)))
     } catch (err) {
       warnings.push(`Could not connect to MCP server "${config.name}": ${errorMessage(err)}`)
     }
@@ -156,7 +156,7 @@ export function registerIpc(ctx: MainContext): void {
     const deps: EngineDeps = {
       getProvider,
       getApiKey: async (id) => ctx.secrets.get(id),
-      listMcpTools: (grants) => collectMcpTools(ctx, grants),
+      listMcpTools: (grants, signal) => collectMcpTools(ctx, grants, signal),
       callMcpTool: (ref, args, signal) => ctx.mcp.callTool(ref, args, signal),
       limits: ctx.settings.get().limits,
       emit

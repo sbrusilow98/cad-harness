@@ -90,3 +90,27 @@ describe('buildNodeToolSet', () => {
     expect(set.autoHandoff).toBeNull()
   })
 })
+
+describe('buildNodeToolSet handoff labels', () => {
+  it('trims whitespace from handoff enum labels', () => {
+    const g = graphWith([
+      { id: 'e1', source: 'a', target: 'b', kind: 'handoff' },
+      { id: 'e2', source: 'a', target: 'c', kind: 'handoff' }
+    ])
+    g.nodes[1].name = '  Writer\n'
+    const set = buildNodeToolSet(g, g.nodes[0], [], new ToolNameRegistry())
+    expect([...set.handoffTargets!.keys()]).toEqual(['Writer', 'Code Reviewer'])
+    const def = set.defs.find((d) => d.name === HANDOFF_TOOL)!
+    expect((def.inputSchema['properties'] as { target: { enum: string[] } }).target.enum).toEqual(['Writer', 'Code Reviewer'])
+  })
+
+  it('falls back to "Agent" for a blank handoff label', () => {
+    const g = graphWith([
+      { id: 'e1', source: 'a', target: 'b', kind: 'handoff' },
+      { id: 'e2', source: 'a', target: 'c', kind: 'handoff' }
+    ])
+    g.nodes[1].name = '   '
+    const set = buildNodeToolSet(g, g.nodes[0], [], new ToolNameRegistry())
+    expect([...set.handoffTargets!.keys()]).toEqual(['Agent', 'Code Reviewer'])
+  })
+})

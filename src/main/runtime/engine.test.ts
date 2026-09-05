@@ -277,3 +277,87 @@ describe('runGraph', () => {
     expect(h.provider.requests[0]).toMatchObject({ system: 'be brief', temperature: 0.2, maxTokens: 500, model: 'claude-opus-5', apiKey: 'key' })
   })
 })
+
+describe('runGraph MCP listing cache', () => {
+  it('lists MCP tools once per run and emits each warning once', async () => {
+    const script: Script = []
+    for (let i = 0; i < 10; i++) script.push(text(`step ${i}`))
+    const h = harness(script, { limits: { maxTotalSteps: 3 } })
+    let listCalls = 0
+    h.deps.listMcpTools = async () => {
+      listCalls++
+      return { tools: [], warnings: ['server gone'] }
+    }
+    const g = graph([{ id: 'e1', source: 'a', target: 'a', kind: 'handoff' }], ['a'])
+    g.nodes[0].tools = [{ serverId: 's', names: '*' }]
+    await run(h, g)
+    expect(listCalls).toBe(1)
+    expect(h.events.filter((e) => e.type === 'run.warning')).toHaveLength(1)
+  })
+})
+
+describe('runGraph limits and empty messages', () => {
+  it('clamps a per-node maxTurns of 0 to one turn', async () => {
+    const h = harness([text('done')])
+    const g = graph([], ['a'])
+    g.nodes[0].maxTurns = 0
+    await run(h, g)
+    expect(h.provider.requests).toHaveLength(1)
+    expect(h.events.at(-1)).toMatchObject({ type: 'run.finished', output: 'done' })
+  })
+
+  it('drops a non-positive maxTokens instead of sending it to the provider', async () => {
+    const h = harness([text('done')])
+    const g = graph([], ['a'])
+    g.nodes[0].maxTokens = 0
+    await run(h, g)
+    expect(h.provider.requests[0].maxTokens).toBeUndefined()
+  })
+
+  it('rejects a delegate call with no task instead of running the child', async () => {
+    const h = harness([call('delegate_to_b', {}), text('final')])
+    await run(h, graph([{ id: 'e1', source: 'a', target: 'b', kind: 'delegate' }], ['a', 'b']))
+    expect(h.events.find((e) => e.type === 'node.tool.result')).toMatchObject({ isError: true })
+    expect((h.events.find((e) => e.type === 'node.tool.result') as { content: string }).content).toMatch(/task/)
+    expect(h.events.some((e) => e.type === 'node.started' && e.nodeId === 'b')).toBe(false)
+    expect(h.events.at(-1)).toMatchObject({ type: 'run.finished', output: 'final' })
+  })
+
+  it('substitutes a placeholder for an empty auto-handoff message', async () => {
+    const h = harness([text(''), text('from B')])
+    await run(h, graph([{ id: 'e1', source: 'a', target: 'b', kind: 'handoff' }], ['a', 'b']))
+    expect(h.events.find((e) => e.type === 'node.started' && e.nodeId === 'b')).toMatchObject({ input: '(no output)' })
+  })
+
+  it('falls back to the node text and then a placeholder for an empty handoff tool message', async () => {
+    const h = harness([call('handoff', { target: 'B', message: '' }), text('B done')])
+    await run(
+      h,
+      graph([
+        { id: 'e1', source: 'a', target: 'b', kind: 'handoff' },
+        { id: 'e2', source: 'a', target: 'c', kind: 'handoff' }
+      ])
+    )
+    expect(h.events.find((e) => e.type === 'node.started' && e.nodeId === 'b')).toMatchObject({ input: '(no output)' })
+  })
+})
+
+describe('runGraph handoff target matching', () => {
+  it('matches a handoff target ignoring surrounding whitespace and case', async () => {
+    const h = harness([call('handoff', { target: 'writer ', message: 'go' }), text('written')])
+    const g = emptyGraph()
+    g.nodes.push(
+      createAgentNode({ x: 0, y: 0 }, { id: 'a', name: 'Router' }),
+      createAgentNode({ x: 0, y: 0 }, { id: 'b', name: 'Writer' }),
+      createAgentNode({ x: 0, y: 0 }, { id: 'c', name: 'Editor' })
+    )
+    g.edges.push(
+      { id: 'e1', source: 'a', target: 'b', kind: 'handoff' },
+      { id: 'e2', source: 'a', target: 'c', kind: 'handoff' }
+    )
+    g.entryNodeId = 'a'
+    await run(h, g)
+    expect(h.events.find((e) => e.type === 'node.started' && e.nodeId === 'b')).toMatchObject({ input: 'go' })
+    expect(h.events.at(-1)).toMatchObject({ type: 'run.finished', output: 'written' })
+  })
+})

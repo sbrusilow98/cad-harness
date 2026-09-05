@@ -77,7 +77,7 @@ export function buildNodeToolSet(
     const options: string[] = []
     for (const edge of handoffs) {
       const child = nodesById.get(edge.target)!
-      const label = uniqueName(child.name, (n) => targets.has(n), 200)
+      const label = uniqueName(child.name.trim() || 'Agent', (n) => targets.has(n), 200)
       targets.set(label, edge)
       const desc = edge.description?.trim()
       options.push(desc ? `${label}: ${desc}` : label)
