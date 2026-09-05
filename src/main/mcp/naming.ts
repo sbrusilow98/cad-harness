@@ -27,10 +27,11 @@ export function uniqueName(
   taken: (name: string) => boolean,
   maxLength = MAX_TOOL_NAME_LENGTH
 ): string {
-  if (!taken(base)) return base
+  const capped = base.slice(0, maxLength)
+  if (!taken(capped)) return capped
   for (let i = 2; ; i++) {
     const suffix = `_${i}`
-    const candidate = base.slice(0, maxLength - suffix.length) + suffix
+    const candidate = capped.slice(0, maxLength - suffix.length) + suffix
     if (!taken(candidate)) return candidate
   }
 }

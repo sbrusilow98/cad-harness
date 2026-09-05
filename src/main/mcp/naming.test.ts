@@ -40,6 +40,11 @@ describe('uniqueName', () => {
     expect(name.length).toBe(64)
     expect(name.endsWith('_2')).toBe(true)
   })
+  it('caps an untaken base at the limit', () => {
+    const name = uniqueName('c'.repeat(80), () => false)
+    expect(name.length).toBe(64)
+    expect(name).toBe('c'.repeat(64))
+  })
 })
 
 describe('ToolNameRegistry', () => {
