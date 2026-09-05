@@ -5,6 +5,7 @@ import { useUiStore } from '@/store/ui'
 import { TopBar } from '@/components/TopBar'
 import { Canvas } from '@/components/Canvas'
 import { Inspector } from '@/components/Inspector'
+import { RunConsole } from '@/components/RunConsole'
 
 export default function App() {
   const loadSettings = useUiStore((s) => s.loadSettings)
@@ -17,6 +18,7 @@ export default function App() {
       <TopBar />
       <Canvas />
       <Inspector />
+      <RunConsole />
     </div>
   )
 }
