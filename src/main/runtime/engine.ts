@@ -4,6 +4,9 @@ import { textOf, toolCallsOf, type ChatProvider, type Message, type ToolCallPart
 import { ToolNameRegistry, type ToolRef } from '../mcp/naming'
 import { buildNodeToolSet, HANDOFF_TOOL, type McpToolInfo, type NodeToolSet } from './graph-tools'
 import { hasErrors, validateGraph } from './validate'
+import { errorMessage } from '@shared/errors'
+
+export { errorMessage } from '@shared/errors'
 
 export interface EngineDeps {
   getProvider(id: ProviderId): ChatProvider
@@ -44,11 +47,6 @@ interface NodeResult {
   executionId: string
   output: string
   handoff?: { edge: GraphEdge; message: string }
-}
-
-export function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  return String(err)
 }
 
 export async function runGraph(opts: RunOptions): Promise<void> {

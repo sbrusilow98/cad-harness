@@ -4,7 +4,7 @@ import type { ChatProvider } from './types'
 import { anthropicProvider } from './anthropic'
 import { fireworksProvider, openaiProvider } from './openai-compatible'
 import { FALLBACK_MODELS } from './fallback-models'
-import { errorMessage } from '../runtime/engine'
+import { errorMessage } from '@shared/errors'
 
 const providers: Record<ProviderId, ChatProvider> = {
   anthropic: anthropicProvider,
