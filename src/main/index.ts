@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'node:path'
 import type { Theme } from '@shared/types'
 import { SettingsStore } from './settings'
@@ -28,6 +28,18 @@ function createWindow(theme: Theme): void {
   mainWindow = win
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
+  })
+  win.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Close anyway', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'You have unsaved changes.',
+      detail: 'Close without saving?'
+    })
+    // preventDefault here *allows* the unload to proceed.
+    if (choice === 0) event.preventDefault()
   })
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])

@@ -48,8 +48,10 @@ export function TopBar() {
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent): void => {
-      if (!useGraphStore.getState().dirty) return
-      if (!window.confirm('You have unsaved changes. Close anyway?')) {
+      // Only signal that the unload needs confirming; main decides with a
+      // native dialog in its `will-prevent-unload` handler. Chromium
+      // suppresses window.confirm() inside beforeunload.
+      if (useGraphStore.getState().dirty) {
         e.preventDefault()
         e.returnValue = ''
       }
