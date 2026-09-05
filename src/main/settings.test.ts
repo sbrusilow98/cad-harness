@@ -21,6 +21,23 @@ describe('normalizeSettings', () => {
   })
 })
 
+describe('normalizeSettings mcpServers', () => {
+  it('keeps well-formed servers and drops malformed ones', () => {
+    const settings = normalizeSettings({
+      mcpServers: [
+        { id: 'a', name: 'A', transport: 'stdio', command: 'npx', args: ['-y', 'x'], env: { K: 'v' } },
+        { id: 'b', name: 'B', transport: 'http', url: 'https://x', headers: { Authorization: 'Bearer t' } },
+        { id: 'c', name: 'C', transport: 'stdio', command: 'npx', args: [1, 2] },
+        { id: 'd', name: 'D', transport: 'http', url: 'https://x', headers: 'nope' },
+        { id: 'e', name: 'E', transport: 'stdio', command: 'npx', args: [], env: { K: 1 } },
+        { id: 'f', name: 'F', transport: 'carrier-pigeon' },
+        { name: 'no id', transport: 'http', url: 'https://x' }
+      ]
+    })
+    expect(settings.mcpServers.map((s) => s.id)).toEqual(['a', 'b'])
+  })
+})
+
 describe('SettingsStore', () => {
   it('starts with defaults when no file exists', () => {
     const store = new SettingsStore(tmpFile())

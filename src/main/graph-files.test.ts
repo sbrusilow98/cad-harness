@@ -47,4 +47,28 @@ describe('graph files', () => {
   it('requires node ids', () => {
     expect(() => normalizeGraph({ version: 1, nodes: [{ name: 'x' }], edges: [] })).toThrow(/id/)
   })
+
+  it('drops edges that reference missing nodes', () => {
+    const g = normalizeGraph({
+      version: 1,
+      nodes: [{ id: 'a' }, { id: 'b' }],
+      edges: [
+        { id: 'e1', source: 'a', target: 'b', kind: 'handoff' },
+        { id: 'e2', source: 'a', target: 'ghost', kind: 'handoff' },
+        { id: 'e3', source: 'ghost', target: 'b', kind: 'delegate' }
+      ]
+    })
+    expect(g.edges.map((e) => e.id)).toEqual(['e1'])
+  })
+
+  it('keeps the first node when ids repeat', () => {
+    const g = normalizeGraph({
+      version: 1,
+      entryNodeId: 'a',
+      nodes: [{ id: 'a', name: 'First' }, { id: 'a', name: 'Second' }, { id: 'b' }],
+      edges: []
+    })
+    expect(g.nodes.map((n) => n.name)).toEqual(['First', 'Agent'])
+    expect(g.entryNodeId).toBe('a')
+  })
 })

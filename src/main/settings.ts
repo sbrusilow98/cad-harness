@@ -2,12 +2,26 @@ import { existsSync, readFileSync } from 'node:fs'
 import { DEFAULT_SETTINGS, type McpServerConfig, type Settings } from '@shared/types'
 import { writeFileAtomic } from './fs-utils'
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.values(value as Record<string, unknown>).every((v) => typeof v === 'string')
+}
+
 function isServerConfig(value: unknown): value is McpServerConfig {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   if (typeof v['id'] !== 'string' || typeof v['name'] !== 'string') return false
-  if (v['transport'] === 'stdio') return typeof v['command'] === 'string' && Array.isArray(v['args'])
-  if (v['transport'] === 'http') return typeof v['url'] === 'string'
+  if (v['transport'] === 'stdio') {
+    if (typeof v['command'] !== 'string' || !Array.isArray(v['args'])) return false
+    if (!v['args'].every((a): a is string => typeof a === 'string')) return false
+    if (v['env'] !== undefined && !isStringRecord(v['env'])) return false
+    return true
+  }
+  if (v['transport'] === 'http') {
+    if (typeof v['url'] !== 'string') return false
+    if (v['headers'] !== undefined && !isStringRecord(v['headers'])) return false
+    return true
+  }
   return false
 }
 

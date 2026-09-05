@@ -61,8 +61,16 @@ export function normalizeGraph(raw: unknown): Graph {
   const r = raw as Record<string, unknown>
   if (r['version'] !== 1) throw new Error(`Unsupported graph version: ${String(r['version'])}.`)
   if (!Array.isArray(r['nodes']) || !Array.isArray(r['edges'])) throw new Error('The graph is missing nodes or edges.')
-  const nodes = r['nodes'].map(normalizeNode)
-  const edges = r['edges'].map(normalizeEdge).filter((e): e is GraphEdge => e !== null)
+  const seenIds = new Set<string>()
+  const nodes = r['nodes'].map(normalizeNode).filter((n) => {
+    if (seenIds.has(n.id)) return false
+    seenIds.add(n.id)
+    return true
+  })
+  const nodeIds = new Set(nodes.map((n) => n.id))
+  const edges = r['edges']
+    .map(normalizeEdge)
+    .filter((e): e is GraphEdge => e !== null && nodeIds.has(e.source) && nodeIds.has(e.target))
   const entry = str(r['entryNodeId'])
   const name = str(r['name'])
   return {
