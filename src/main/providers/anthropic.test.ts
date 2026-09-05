@@ -44,6 +44,16 @@ describe('toAnthropicMessages', () => {
     expect(toAnthropicMessages(msgs)).toEqual([{ role: 'assistant', content: raw }])
   })
 
+  it('ignores an empty raw content array and rebuilds from parts', () => {
+    const msgs: Message[] = [{ role: 'assistant', parts: [{ type: 'text', text: 'ok' }], raw: { provider: 'anthropic', content: [] } }]
+    expect(toAnthropicMessages(msgs)).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }])
+  })
+
+  it('ignores non-array raw content', () => {
+    const msgs: Message[] = [{ role: 'assistant', parts: [], raw: { provider: 'anthropic', content: 'oops' } }]
+    expect(toAnthropicMessages(msgs)).toEqual([{ role: 'assistant', content: [{ type: 'text', text: '(no output)' }] }])
+  })
+
   it('ignores raw content from other providers', () => {
     const msgs: Message[] = [{ role: 'assistant', parts: [{ type: 'text', text: 'ok' }], raw: { provider: 'openai', content: { foo: 1 } } }]
     expect(toAnthropicMessages(msgs)).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }])

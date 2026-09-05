@@ -44,6 +44,26 @@ describe('graph files', () => {
     expect(g.edges).toEqual([{ id: 'e1', source: 'n1', target: 'n1', kind: 'handoff' }])
   })
 
+  it('drops out-of-range temperature, maxTokens and maxTurns', () => {
+    const g = normalizeGraph({
+      version: 1,
+      nodes: [{ id: 'n1', maxTurns: 0, maxTokens: -5, temperature: 9 }],
+      edges: []
+    })
+    expect(g.nodes[0]).not.toHaveProperty('maxTurns')
+    expect(g.nodes[0]).not.toHaveProperty('maxTokens')
+    expect(g.nodes[0]).not.toHaveProperty('temperature')
+  })
+
+  it('keeps in-range limits and floors fractional ones', () => {
+    const g = normalizeGraph({
+      version: 1,
+      nodes: [{ id: 'n1', maxTurns: 3.7, maxTokens: 1000.5, temperature: 0 }],
+      edges: []
+    })
+    expect(g.nodes[0]).toMatchObject({ maxTurns: 3, maxTokens: 1000, temperature: 0 })
+  })
+
   it('requires node ids', () => {
     expect(() => normalizeGraph({ version: 1, nodes: [{ name: 'x' }], edges: [] })).toThrow(/id/)
   })

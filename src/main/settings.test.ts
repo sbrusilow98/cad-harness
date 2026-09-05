@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SettingsStore, normalizeSettings } from './settings'
@@ -53,6 +53,15 @@ describe('SettingsStore', () => {
     expect(existsSync(path)).toBe(true)
     expect(JSON.parse(readFileSync(path, 'utf8')).theme).toBe('light')
     expect(new SettingsStore(path).get()).toEqual(updated)
+  })
+
+  it('keeps the previous settings in memory when the write fails', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-graph-'))
+    const blocker = join(dir, 'blocker')
+    writeFileSync(blocker, 'not a directory')
+    const store = new SettingsStore(join(blocker, 'settings.json'))
+    expect(() => store.update({ theme: 'light' })).toThrow()
+    expect(store.get()).toEqual(DEFAULT_SETTINGS)
   })
 
   it('merges partial limit patches', () => {

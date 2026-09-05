@@ -63,12 +63,13 @@ export class SettingsStore {
   }
 
   update(patch: Partial<Settings>): Settings {
-    this.settings = normalizeSettings({
+    const next = normalizeSettings({
       ...this.settings,
       ...patch,
       limits: { ...this.settings.limits, ...(patch.limits ?? {}) }
     })
-    writeFileAtomic(this.filePath, JSON.stringify(this.settings, null, 2))
+    writeFileAtomic(this.filePath, JSON.stringify(next, null, 2))
+    this.settings = next
     return this.settings
   }
 }

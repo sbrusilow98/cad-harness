@@ -8,6 +8,11 @@ function num(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function positiveInt(value: unknown): number | undefined {
+  const n = num(value)
+  return n !== undefined && n >= 1 ? Math.floor(n) : undefined
+}
+
 function normalizeGrant(raw: unknown): ToolGrant[] {
   if (!raw || typeof raw !== 'object') return []
   const r = raw as Record<string, unknown>
@@ -35,9 +40,9 @@ function normalizeNode(raw: unknown, index: number): AgentNode {
     tools: Array.isArray(r['tools']) ? r['tools'].flatMap(normalizeGrant) : []
   }
   const temperature = num(r['temperature'])
-  const maxTokens = num(r['maxTokens'])
-  const maxTurns = num(r['maxTurns'])
-  if (temperature !== undefined) node.temperature = temperature
+  const maxTokens = positiveInt(r['maxTokens'])
+  const maxTurns = positiveInt(r['maxTurns'])
+  if (temperature !== undefined && temperature >= 0 && temperature <= 2) node.temperature = temperature
   if (maxTokens !== undefined) node.maxTokens = maxTokens
   if (maxTurns !== undefined) node.maxTurns = maxTurns
   return node

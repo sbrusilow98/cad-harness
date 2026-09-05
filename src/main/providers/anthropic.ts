@@ -17,7 +17,7 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
       case 'user':
         return { role: 'user', content: m.content }
       case 'assistant': {
-        if (m.raw?.provider === 'anthropic') {
+        if (m.raw?.provider === 'anthropic' && Array.isArray(m.raw.content) && m.raw.content.length > 0) {
           return { role: 'assistant', content: m.raw.content as Anthropic.ContentBlockParam[] }
         }
         const content: Anthropic.ContentBlockParam[] = []
