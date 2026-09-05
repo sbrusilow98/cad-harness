@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import type { AgentNode, GraphEdge } from '@shared/types'
 import { useGraphStore } from '@/store/graph'
-import { useUiStore, type Selection } from '@/store/ui'
+import { useUiStore } from '@/store/ui'
 import { useRunStore, type NodeStatus } from '@/store/run'
 import { AgentNodeCard, type AgentFlowNode } from './AgentNodeCard'
 import { GraphEdgeView, type GraphFlowEdge } from './GraphEdgeView'
@@ -35,7 +35,7 @@ function toFlowNode(
   isEntry: boolean,
   status: NodeStatus | undefined,
   warning: boolean,
-  selection: Selection,
+  fresh: string | null,
   prev: AgentFlowNode | undefined
 ): AgentFlowNode {
   return {
@@ -43,7 +43,7 @@ function toFlowNode(
     type: 'agent',
     position: prev?.dragging ? prev.position : node.position,
     data: { node, isEntry, status, warning },
-    selected: prev ? prev.selected : selection?.type === 'node' && selection.id === node.id,
+    selected: fresh !== null ? node.id === fresh : (prev?.selected ?? false),
     dragging: prev?.dragging,
     measured: prev?.measured
   }
@@ -74,11 +74,12 @@ function CanvasInner() {
   const select = useUiStore((s) => s.select)
   const nodeStatus = useRunStore((s) => s.nodeStatus)
   const traversed = useRunStore((s) => s.traversedEdgeIds)
-  const { screenToFlowPosition } = useReactFlow()
+  const fitViewRequest = useUiStore((s) => s.fitViewRequest)
+  const { screenToFlowPosition, fitView } = useReactFlow()
 
   const theme = settings?.theme ?? 'dark'
   const markerColor = theme === 'dark' ? '#6f6f6f' : '#8f8f8f'
-  const knownServers = useMemo(() => new Set((settings?.mcpServers ?? []).map((s) => s.id)), [settings])
+  const knownServers = useMemo(() => new Set((settings?.mcpServers ?? []).map((s) => s.id)), [settings?.mcpServers])
 
   const [nodes, setNodes, onNodesChange] = useNodesState<AgentFlowNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<GraphFlowEdge>([])
@@ -88,18 +89,19 @@ function CanvasInner() {
   useEffect(() => {
     setNodes((prev) => {
       const prevById = new Map(prev.map((p) => [p.id, p]))
+      const fresh = selection?.type === 'node' && !prevById.has(selection.id) ? selection.id : null
       return graph.nodes.map((n) =>
         toFlowNode(
           n,
           graph.entryNodeId === n.id,
           nodeStatus[n.id],
-          n.tools.some((t) => !knownServers.has(t.serverId)),
-          selection,
+          settings !== null && n.tools.some((t) => !knownServers.has(t.serverId)),
+          fresh,
           prevById.get(n.id)
         )
       )
     })
-  }, [graph.nodes, graph.entryNodeId, nodeStatus, knownServers, selection, setNodes])
+  }, [graph.nodes, graph.entryNodeId, nodeStatus, knownServers, settings, selection, setNodes])
 
   useEffect(() => {
     setEdges((prev) => {
@@ -108,6 +110,16 @@ function CanvasInner() {
       return graph.edges.map((e) => toFlowEdge(e, traversedSet.has(e.id), markerColor, prevById.get(e.id)))
     })
   }, [graph.edges, traversed, markerColor, setEdges])
+
+  useEffect(() => {
+    if (fitViewRequest > 0) {
+      const timeout = window.setTimeout(() => {
+        fitView({ padding: 0.2, duration: 200 })
+      }, 50)
+      return () => window.clearTimeout(timeout)
+    }
+    return undefined
+  }, [fitViewRequest, fitView])
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) useGraphStore.getState().addEdge(connection.source, connection.target)
@@ -181,7 +193,8 @@ function CanvasInner() {
             label: 'Delete',
             onClick: () => {
               store.removeNodes([node.id])
-              select(null)
+              const currentSelection = useUiStore.getState().selection
+              if (currentSelection?.type === 'node' && currentSelection.id === node.id) select(null)
             }
           }
         ]
@@ -206,7 +219,8 @@ function CanvasInner() {
             label: 'Delete',
             onClick: () => {
               store.removeEdges([edge.id])
-              select(null)
+              const currentSelection = useUiStore.getState().selection
+              if (currentSelection?.type === 'edge' && currentSelection.id === edge.id) select(null)
             }
           }
         ]

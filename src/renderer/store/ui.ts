@@ -19,6 +19,7 @@ interface UiState {
   consoleHeight: number
   modelCache: Partial<Record<ProviderId, ModelListResult>>
   toolCache: Record<string, ToolCacheEntry>
+  fitViewRequest: number
   loadSettings(): Promise<void>
   updateSettings(patch: Partial<Settings>): Promise<void>
   setTheme(theme: Theme): Promise<void>
@@ -28,6 +29,7 @@ interface UiState {
   setConsoleHeight(height: number): void
   fetchModels(provider: ProviderId, force?: boolean): Promise<void>
   fetchTools(serverId: string, force?: boolean): Promise<void>
+  requestFitView(): void
 }
 
 export function applyTheme(theme: Theme): void {
@@ -42,6 +44,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   consoleHeight: 320,
   modelCache: {},
   toolCache: {},
+  fitViewRequest: 0,
 
   async loadSettings() {
     const settings = await window.api.getSettings()
@@ -117,5 +120,9 @@ export const useUiStore = create<UiState>((set, get) => ({
         }
       })
     }
+  },
+
+  requestFitView() {
+    set({ fitViewRequest: get().fitViewRequest + 1 })
   }
 }))
