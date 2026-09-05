@@ -314,6 +314,22 @@ describe('runGraph limits and empty messages', () => {
     expect(h.provider.requests[0].maxTokens).toBeUndefined()
   })
 
+  it('drops an out-of-range temperature instead of sending it to the provider', async () => {
+    const h = harness([text('done')])
+    const g = graph([], ['a'])
+    g.nodes[0].temperature = 9
+    await run(h, g)
+    expect(h.provider.requests[0].temperature).toBeUndefined()
+  })
+
+  it('passes an in-range temperature through to the provider', async () => {
+    const h = harness([text('done')])
+    const g = graph([], ['a'])
+    g.nodes[0].temperature = 0.5
+    await run(h, g)
+    expect(h.provider.requests[0].temperature).toBe(0.5)
+  })
+
   it('rejects a delegate call with no task instead of running the child', async () => {
     const h = harness([call('delegate_to_b', {}), text('final')])
     await run(h, graph([{ id: 'e1', source: 'a', target: 'b', kind: 'delegate' }], ['a', 'b']))

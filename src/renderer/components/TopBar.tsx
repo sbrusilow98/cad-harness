@@ -19,8 +19,10 @@ export function TopBar() {
   const triggerRun = (): void => {
     const wasOpen = consoleOpen
     setConsoleOpen(true)
-    // When the console was closed it has not mounted its RUN_EVENT listener
-    // yet, so give React a tick to render it before dispatching.
+    // The console is always mounted (it renders null while hidden but keeps
+    // its listeners), so when it was closed we just need to give React a tick
+    // to re-render it as open before its RUN_EVENT handler tries to focus the
+    // input.
     if (wasOpen) window.dispatchEvent(new Event(RUN_EVENT))
     else setTimeout(() => window.dispatchEvent(new Event(RUN_EVENT)), 0)
   }

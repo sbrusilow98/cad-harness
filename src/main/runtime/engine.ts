@@ -6,8 +6,6 @@ import { buildNodeToolSet, HANDOFF_TOOL, type McpToolInfo, type NodeToolSet } fr
 import { hasErrors, validateGraph } from './validate'
 import { errorMessage } from '@shared/errors'
 
-export { errorMessage } from '@shared/errors'
-
 export interface EngineDeps {
   getProvider(id: ProviderId): ChatProvider
   getApiKey(id: ProviderId): Promise<string | null>
@@ -181,6 +179,13 @@ async function executeNode(
       typeof node.maxTokens === 'number' && Number.isFinite(node.maxTokens) && node.maxTokens >= 1
         ? Math.floor(node.maxTokens)
         : undefined
+    const temperature =
+      typeof node.temperature === 'number' &&
+      Number.isFinite(node.temperature) &&
+      node.temperature >= 0 &&
+      node.temperature <= 2
+        ? node.temperature
+        : undefined
 
     for (let turn = 0; turn < maxTurns; turn++) {
       throwIfCancelled(ctx)
@@ -195,7 +200,7 @@ async function executeNode(
           system: node.instructions,
           messages: [...messages],
           tools: toolSet.defs,
-          temperature: node.temperature,
+          temperature,
           maxTokens,
           signal: ctx.signal
         },

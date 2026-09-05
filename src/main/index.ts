@@ -8,6 +8,7 @@ import { McpRegistry } from './mcp/registry'
 import { registerIpc } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
+let quitting = false
 
 function createWindow(theme: Theme): void {
   const win = new BrowserWindow({
@@ -39,7 +40,11 @@ function createWindow(theme: Theme): void {
       detail: 'Close without saving?'
     })
     // preventDefault here *allows* the unload to proceed.
-    if (choice === 0) event.preventDefault()
+    if (choice === 0) {
+      event.preventDefault()
+    } else {
+      quitting = false
+    }
   })
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -60,12 +65,13 @@ void app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(settings.get().theme)
   })
-  let quitting = false
   app.on('before-quit', (event) => {
     if (quitting) return
     event.preventDefault()
     quitting = true
-    void mcp.closeAll().finally(() => app.quit())
+    void Promise.race([mcp.closeAll(), new Promise<void>((resolve) => setTimeout(resolve, 3000))])
+      .catch(() => undefined)
+      .finally(() => app.quit())
   })
 })
 
