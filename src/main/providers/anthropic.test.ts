@@ -73,6 +73,13 @@ describe('toAnthropicMessages', () => {
       }
     ])
   })
+
+  it('substitutes a placeholder for empty tool result content', () => {
+    const msgs: Message[] = [{ role: 'tool', results: [{ callId: 'toolu_1', content: '' }] }]
+    expect(toAnthropicMessages(msgs)).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '(no output)' }] }
+    ])
+  })
 })
 
 describe('fromAnthropicMessage', () => {

@@ -37,7 +37,7 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
           content: m.results.map((r): Anthropic.ToolResultBlockParam => ({
             type: 'tool_result',
             tool_use_id: r.callId,
-            content: r.content,
+            content: r.content.length > 0 ? r.content : '(no output)',
             ...(r.isError ? { is_error: true } : {})
           }))
         }
