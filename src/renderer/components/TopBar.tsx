@@ -17,13 +17,17 @@ export function TopBar() {
   const runStatus = useRunStore((s) => s.status)
 
   const triggerRun = (): void => {
-    if (!consoleOpen) setConsoleOpen(true)
-    else window.dispatchEvent(new Event(RUN_EVENT))
+    const wasOpen = consoleOpen
+    setConsoleOpen(true)
+    // When the console was closed it has not mounted its RUN_EVENT listener
+    // yet, so give React a tick to render it before dispatching.
+    if (wasOpen) window.dispatchEvent(new Event(RUN_EVENT))
+    else setTimeout(() => window.dispatchEvent(new Event(RUN_EVENT)), 0)
   }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (!(e.metaKey || e.ctrlKey)) return
+      if (!(e.metaKey || e.ctrlKey) || e.repeat) return
       const key = e.key.toLowerCase()
       if (key === 's') {
         e.preventDefault()

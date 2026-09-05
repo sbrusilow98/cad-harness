@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { useGraphStore } from '@/store/graph'
 import { useUiStore } from '@/store/ui'
 import { useRunStore, type ExecutionView } from '@/store/run'
@@ -23,7 +23,7 @@ interface BlockProps {
   edgeTarget: (edgeId: string) => string
 }
 
-function ExecutionBlock({ exec, nodeName, edgeTarget }: BlockProps) {
+const ExecutionBlock = memo(function ExecutionBlock({ exec, nodeName, edgeTarget }: BlockProps) {
   return (
     <div className="exec" style={{ '--depth': exec.depth } as CSSProperties}>
       <div className="exec-head">
@@ -50,7 +50,7 @@ function ExecutionBlock({ exec, nodeName, edgeTarget }: BlockProps) {
       {exec.error && <div className="exec-error">{exec.error}</div>}
     </div>
   )
-}
+})
 
 export function RunConsole() {
   const open = useUiStore((s) => s.consoleOpen)
@@ -61,14 +61,22 @@ export function RunConsole() {
   const graph = useGraphStore((s) => s.graph)
   const [input, setInput] = useState('')
   const [startError, setStartError] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const atBottomRef = useRef(true)
 
   useEffect(() => window.api.onRunEvent(run.handleEvent), [run.handleEvent])
 
   const start = useCallback(async () => {
     const text = input.trim()
-    if (!text || useRunStore.getState().status === 'running') return
+    if (!text) {
+      setHint('Type a message for the entry agent first.')
+      inputRef.current?.focus()
+      return
+    }
+    if (useRunStore.getState().status === 'running') return
+    setHint(null)
     setStartError(null)
     try {
       await window.api.startRun(useGraphStore.getState().graph, text)
@@ -82,13 +90,18 @@ export function RunConsole() {
     if (id) void window.api.stopRun(id)
   }, [])
 
+  // Keep the latest `start` in a ref so the listener subscribes only once
+  // instead of re-subscribing on every keystroke.
+  const startRef = useRef(start)
+  startRef.current = start
+
   useEffect(() => {
     const handler = (): void => {
-      void start()
+      void startRef.current()
     }
     window.addEventListener(RUN_EVENT, handler)
     return () => window.removeEventListener(RUN_EVENT, handler)
-  }, [start])
+  }, [])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
@@ -96,8 +109,28 @@ export function RunConsole() {
 
   useEffect(() => {
     const el = bodyRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    // Only follow the tail when the reader was already at it; otherwise a long
+    // run would yank them back down while they read earlier output.
+    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight
   }, [run.executions, run.output, run.error, run.status])
+
+  const onBodyScroll = (): void => {
+    const el = bodyRef.current
+    if (el) atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 40
+  }
+
+  const nodeName = useCallback(
+    (id: string): string => graph.nodes.find((n) => n.id === id)?.name ?? 'Unknown agent',
+    [graph.nodes]
+  )
+  // Stable across text deltas so the memoised blocks are not all re-rendered.
+  const edgeTarget = useCallback(
+    (edgeId: string): string => {
+      const edge = graph.edges.find((e) => e.id === edgeId)
+      return edge ? nodeName(edge.target) : '?'
+    },
+    [graph.edges, nodeName]
+  )
 
   const onResizeStart = (e: ReactMouseEvent): void => {
     e.preventDefault()
@@ -114,11 +147,6 @@ export function RunConsole() {
 
   if (!open) return null
 
-  const nodeName = (id: string): string => graph.nodes.find((n) => n.id === id)?.name ?? 'Unknown agent'
-  const edgeTarget = (edgeId: string): string => {
-    const edge = graph.edges.find((e) => e.id === edgeId)
-    return edge ? nodeName(edge.target) : '?'
-  }
   const running = run.status === 'running'
 
   return (
@@ -137,7 +165,7 @@ export function RunConsole() {
           ×
         </button>
       </div>
-      <div className="console-body" ref={bodyRef}>
+      <div className="console-body" ref={bodyRef} onScroll={onBodyScroll}>
         {run.warnings.map((w, i) => (
           <div key={i} className="warning-line">
             ⚠ {w}
@@ -158,6 +186,7 @@ export function RunConsole() {
         {run.status === 'error' && <div className="run-output exec-error">{run.error}</div>}
         {run.status === 'cancelled' && <div className="run-output muted">Run stopped.</div>}
         {startError && <div className="run-output exec-error">{startError}</div>}
+        {hint && <div className="run-output muted">{hint}</div>}
       </div>
       <div className="console-input">
         <textarea
@@ -166,7 +195,10 @@ export function RunConsole() {
           value={input}
           placeholder="Message for the entry agent…"
           spellCheck={false}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value)
+            setHint(null)
+          }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault()
@@ -179,7 +211,7 @@ export function RunConsole() {
             Stop
           </button>
         ) : (
-          <button type="button" className="btn btn-primary" onClick={() => void start()} disabled={!input.trim()}>
+          <button type="button" className="btn btn-primary" onClick={() => void start()}>
             Run
           </button>
         )}

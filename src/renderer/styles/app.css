@@ -125,6 +125,7 @@ textarea {
 .btn-icon {
   width: 26px;
   padding: 0;
+  font-size: 15px;
   justify-content: center;
 }
 .btn-small {
