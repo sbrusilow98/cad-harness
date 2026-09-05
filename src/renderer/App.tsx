@@ -6,6 +6,7 @@ import { TopBar } from '@/components/TopBar'
 import { Canvas } from '@/components/Canvas'
 import { Inspector } from '@/components/Inspector'
 import { RunConsole } from '@/components/RunConsole'
+import { SettingsDialog } from '@/components/SettingsDialog'
 
 export default function App() {
   const loadSettings = useUiStore((s) => s.loadSettings)
@@ -19,6 +20,7 @@ export default function App() {
       <Canvas />
       <Inspector />
       <RunConsole />
+      <SettingsDialog />
     </div>
   )
 }
