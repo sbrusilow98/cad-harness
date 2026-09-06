@@ -1,13 +1,15 @@
 import type { ProviderId } from './types'
 
 /**
- * Model families that reject `temperature` with an error instead of ignoring it.
- * Anthropic removed sampling parameters on Fable/Mythos 5.x, Opus 5 / 4.8 / 4.7 and Sonnet 5;
- * OpenAI rejects it on the reasoning models (the o-series and GPT-5 and newer).
+ * Models that reject `temperature` with an error instead of ignoring it. Anthropic removed
+ * sampling parameters across the Claude 5 generation and on Opus 4.7 and 4.8; OpenAI rejects
+ * it on its reasoning models.
  */
 const REJECTS_TEMPERATURE: Record<ProviderId, RegExp | null> = {
-  anthropic: /^claude-(fable|mythos)-5|^claude-opus-(5|4-8|4-7)|^claude-sonnet-5/,
-  openai: /^(o\d|gpt-([5-9]|\d{2,}))/,
+  // Every Claude family from major version 5 on, plus Opus 4.7 and 4.8.
+  anthropic: /^claude-[a-z]+-([5-9]|\d{2,})|^claude-opus-4-[78]/,
+  // The o-series, GPT-5 and newer, and the codex models.
+  openai: /^(o\d|codex-|gpt-([5-9]|\d{2,}))/,
   fireworks: null
 }
 
@@ -20,13 +22,4 @@ function baseModel(model: string): string {
 export function supportsTemperature(provider: ProviderId, model: string): boolean {
   const pattern = REJECTS_TEMPERATURE[provider]
   return pattern ? !pattern.test(baseModel(model)) : true
-}
-
-/**
- * OpenAI reasoning models cannot use function tools through Chat Completions; they need the
- * Responses API. The OpenAI adapter uses Responses for every model, so this only marks which
- * models would break on the older endpoint.
- */
-export function requiresResponsesApi(provider: ProviderId, model: string): boolean {
-  return provider === 'openai' && /^(o\d|gpt-([5-9]|\d{2,}))/.test(baseModel(model))
 }

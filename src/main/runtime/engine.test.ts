@@ -324,6 +324,7 @@ describe('runGraph limits and empty messages', () => {
   it('drops an out-of-range temperature instead of sending it to the provider', async () => {
     const h = harness([text('done')])
     const g = graph([], ['a'])
+    g.nodes[0].model = 'claude-opus-4-6'
     g.nodes[0].temperature = 9
     await run(h, g)
     expect(h.provider.requests[0].temperature).toBeUndefined()

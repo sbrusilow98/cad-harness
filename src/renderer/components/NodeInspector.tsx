@@ -21,7 +21,7 @@ function NumberField({ label, value, min, max, step, disabled, onChange }: Numbe
       <input
         className="input"
         type="number"
-        value={value ?? ''}
+        value={disabled ? '' : (value ?? '')}
         min={min}
         max={max}
         step={step}

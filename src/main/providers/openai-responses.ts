@@ -48,10 +48,11 @@ export function toResponsesInput(messages: Message[]): ResponseInput {
 export interface ResponsesAccumulator {
   text: string
   response: FinalResponse | null
+  failed: boolean
 }
 
 export function newResponsesAccumulator(): ResponsesAccumulator {
-  return { text: '', response: null }
+  return { text: '', response: null, failed: false }
 }
 
 /** Feeds one stream event and returns the text delta it carried, if any. */
@@ -60,8 +61,12 @@ export function feedResponsesEvent(acc: ResponsesAccumulator, event: StreamEvent
     acc.text += event.delta
     return event.delta
   }
-  if (event.type === 'response.completed' || event.type === 'response.incomplete' || event.type === 'response.failed') {
+  if (event.type === 'response.completed' || event.type === 'response.incomplete') {
     acc.response = event.response
+  }
+  if (event.type === 'response.failed') {
+    acc.response = event.response
+    acc.failed = true
   }
   return ''
 }
@@ -77,6 +82,11 @@ function parseArgs(raw: string): Record<string, unknown> {
 }
 
 export function finishResponsesAccumulator(acc: ResponsesAccumulator): ChatResponse {
+  if (acc.failed) {
+    // The SDK only throws when the error is at the top level of the event, so surface this one.
+    throw new Error(acc.response?.error?.message ?? 'The OpenAI response failed.')
+  }
+
   const parts: AssistantPart[] = []
   let refused = false
 
@@ -96,10 +106,11 @@ export function finishResponsesAccumulator(acc: ResponsesAccumulator): ChatRespo
     parts.push({ type: 'text', text: acc.text })
   }
 
+  const reason = acc.response?.incomplete_details?.reason
   let stopReason: StopReason = 'end'
-  if (parts.some((p) => p.type === 'tool_call')) stopReason = 'tool_use'
-  else if (refused) stopReason = 'refusal'
-  else if (acc.response?.incomplete_details?.reason === 'max_output_tokens') stopReason = 'max_tokens'
+  if (refused || reason === 'content_filter') stopReason = 'refusal'
+  else if (parts.some((p) => p.type === 'tool_call')) stopReason = 'tool_use'
+  else if (reason === 'max_output_tokens') stopReason = 'max_tokens'
 
   return { parts, stopReason }
 }

@@ -16,11 +16,31 @@ function textDelta(delta: string): StreamEvent {
   return { type: 'response.output_text.delta', delta } as unknown as StreamEvent
 }
 
-function completed(output: unknown[], incomplete: unknown = null): StreamEvent {
+/** The item shapes are typed so a misspelled field fails the build, not just the assertion. */
+function completed(output: OpenAI.Responses.ResponseOutputItem[], incomplete: FinalResponse['incomplete_details'] = null): StreamEvent {
   return {
     type: 'response.completed',
     response: { output, incomplete_details: incomplete } as unknown as FinalResponse
   } as unknown as StreamEvent
+}
+
+function failed(message: string): StreamEvent {
+  return {
+    type: 'response.failed',
+    response: { output: [], error: { code: 'server_error', message } } as unknown as FinalResponse
+  } as unknown as StreamEvent
+}
+
+function message(...content: OpenAI.Responses.ResponseOutputMessage['content']): OpenAI.Responses.ResponseOutputItem {
+  return { type: 'message', id: 'm1', role: 'assistant', status: 'completed', content }
+}
+
+function functionCall(callId: string, name: string, args: string): OpenAI.Responses.ResponseOutputItem {
+  return { type: 'function_call', call_id: callId, name, arguments: args }
+}
+
+function outputText(text: string): OpenAI.Responses.ResponseOutputText {
+  return { type: 'output_text', text, annotations: [] }
 }
 
 describe('toResponsesTools', () => {
@@ -64,7 +84,7 @@ describe('response streaming', () => {
     const acc = newResponsesAccumulator()
     expect(feedResponsesEvent(acc, textDelta('Hel'))).toBe('Hel')
     expect(feedResponsesEvent(acc, textDelta('lo'))).toBe('lo')
-    feedResponsesEvent(acc, completed([{ type: 'message', content: [{ type: 'output_text', text: 'Hello' }] }]))
+    feedResponsesEvent(acc, completed([message(outputText('Hello'))]))
     expect(finishResponsesAccumulator(acc)).toEqual({ parts: [{ type: 'text', text: 'Hello' }], stopReason: 'end' })
   })
 
@@ -72,10 +92,7 @@ describe('response streaming', () => {
     const acc = newResponsesAccumulator()
     feedResponsesEvent(
       acc,
-      completed([
-        { type: 'reasoning', summary: [] },
-        { type: 'function_call', call_id: 'call_a', name: 'read', arguments: '{"path":"/x"}' }
-      ])
+      completed([{ type: 'reasoning', id: 'r1', summary: [] }, functionCall('call_a', 'read', '{"path":"/x"}')])
     )
     expect(finishResponsesAccumulator(acc)).toEqual({
       parts: [{ type: 'tool_call', id: 'call_a', name: 'read', args: { path: '/x' } }],
@@ -85,15 +102,19 @@ describe('response streaming', () => {
 
   it('maps refusal and truncation, and tolerates malformed arguments', () => {
     const refusal = newResponsesAccumulator()
-    feedResponsesEvent(refusal, completed([{ type: 'message', content: [{ type: 'refusal', refusal: 'no' }] }]))
+    feedResponsesEvent(refusal, completed([message({ type: 'refusal', refusal: 'no' })]))
     expect(finishResponsesAccumulator(refusal).stopReason).toBe('refusal')
 
     const truncated = newResponsesAccumulator()
-    feedResponsesEvent(truncated, completed([{ type: 'message', content: [{ type: 'output_text', text: 'x' }] }], { reason: 'max_output_tokens' }))
+    feedResponsesEvent(truncated, completed([message(outputText('x'))], { reason: 'max_output_tokens' }))
     expect(finishResponsesAccumulator(truncated).stopReason).toBe('max_tokens')
 
+    const filtered = newResponsesAccumulator()
+    feedResponsesEvent(filtered, completed([message(outputText('x'))], { reason: 'content_filter' }))
+    expect(finishResponsesAccumulator(filtered).stopReason).toBe('refusal')
+
     const bad = newResponsesAccumulator()
-    feedResponsesEvent(bad, completed([{ type: 'function_call', call_id: 'c', name: 'f', arguments: '{oops' }]))
+    feedResponsesEvent(bad, completed([functionCall('c', 'f', '{oops')]))
     expect(finishResponsesAccumulator(bad).parts).toEqual([{ type: 'tool_call', id: 'c', name: 'f', args: {} }])
   })
 
@@ -101,5 +122,19 @@ describe('response streaming', () => {
     const acc = newResponsesAccumulator()
     feedResponsesEvent(acc, textDelta('partial'))
     expect(finishResponsesAccumulator(acc)).toEqual({ parts: [{ type: 'text', text: 'partial' }], stopReason: 'end' })
+  })
+})
+
+describe('failed responses', () => {
+  it('throws with the API error rather than reporting an empty successful turn', () => {
+    const acc = newResponsesAccumulator()
+    feedResponsesEvent(acc, failed('The model is overloaded.'))
+    expect(() => finishResponsesAccumulator(acc)).toThrow('The model is overloaded.')
+  })
+
+  it('reports a refusal even when the model also emitted a tool call', () => {
+    const acc = newResponsesAccumulator()
+    feedResponsesEvent(acc, completed([message({ type: 'refusal', refusal: 'no' }), functionCall('c1', 'f', '{}')]))
+    expect(finishResponsesAccumulator(acc).stopReason).toBe('refusal')
   })
 })

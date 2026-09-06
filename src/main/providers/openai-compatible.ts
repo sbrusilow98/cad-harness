@@ -10,7 +10,6 @@ export interface OpenAICompatibleOptions {
   id: ProviderId
   baseURL?: string
   maxTokensParam: 'max_completion_tokens' | 'max_tokens'
-  filterModels?: (id: string) => boolean
 }
 
 export function toOpenAITools(tools: ToolDef[]): ChatTool[] {
@@ -115,8 +114,7 @@ export function createOpenAICompatibleProvider(opts: OpenAICompatibleOptions): C
       const client = new OpenAI({ apiKey, baseURL: opts.baseURL })
       const ids: string[] = []
       for await (const model of client.models.list({ signal })) ids.push(model.id)
-      const keep = opts.filterModels ?? (() => true)
-      return ids.filter(keep).sort()
+      return ids.sort()
     },
 
     async chat(req, onTextDelta) {
