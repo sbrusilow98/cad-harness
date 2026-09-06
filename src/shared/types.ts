@@ -73,6 +73,8 @@ export interface Settings {
   mcpServers: McpServerConfig[]
   limits: RunLimits
   recentFiles: string[]
+  /** Required only for Anthropic API keys that are not scoped to a workspace. */
+  anthropicWorkspaceId?: string
 }
 
 export const DEFAULT_LIMITS: RunLimits = { maxTurns: 25, maxDelegationDepth: 5, maxTotalSteps: 200 }

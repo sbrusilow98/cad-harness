@@ -70,3 +70,11 @@ describe('SettingsStore', () => {
     expect(store.get().limits).toEqual({ maxTurns: 1, maxDelegationDepth: 5, maxTotalSteps: 200 })
   })
 })
+
+describe('normalizeSettings anthropicWorkspaceId', () => {
+  it('keeps a trimmed workspace id and drops blank ones', () => {
+    expect(normalizeSettings({ anthropicWorkspaceId: ' wrkspc_01 ' }).anthropicWorkspaceId).toBe('wrkspc_01')
+    expect(normalizeSettings({ anthropicWorkspaceId: '   ' })).not.toHaveProperty('anthropicWorkspaceId')
+    expect(normalizeSettings({ anthropicWorkspaceId: 42 })).not.toHaveProperty('anthropicWorkspaceId')
+  })
+})

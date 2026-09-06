@@ -38,7 +38,10 @@ export function normalizeSettings(raw: unknown): Settings {
       maxDelegationDepth: pick(limits.maxDelegationDepth, DEFAULT_SETTINGS.limits.maxDelegationDepth),
       maxTotalSteps: pick(limits.maxTotalSteps, DEFAULT_SETTINGS.limits.maxTotalSteps)
     },
-    recentFiles: Array.isArray(r.recentFiles) ? r.recentFiles.filter((f): f is string => typeof f === 'string') : []
+    recentFiles: Array.isArray(r.recentFiles) ? r.recentFiles.filter((f): f is string => typeof f === 'string') : [],
+    ...(typeof r.anthropicWorkspaceId === 'string' && r.anthropicWorkspaceId.trim()
+      ? { anthropicWorkspaceId: r.anthropicWorkspaceId.trim() }
+      : {})
   }
 }
 

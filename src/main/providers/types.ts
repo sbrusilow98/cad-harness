@@ -48,6 +48,8 @@ export interface ChatRequest {
   temperature?: number
   maxTokens?: number
   signal: AbortSignal
+  /** Anthropic only: sent as the anthropic-workspace-id header. */
+  workspaceId?: string
 }
 
 export interface ChatResponse {
@@ -58,7 +60,7 @@ export interface ChatResponse {
 
 export interface ChatProvider {
   id: ProviderId
-  listModels(apiKey: string, signal?: AbortSignal): Promise<string[]>
+  listModels(apiKey: string, signal?: AbortSignal, workspaceId?: string): Promise<string[]>
   chat(req: ChatRequest, onTextDelta: (text: string) => void): Promise<ChatResponse>
 }
 

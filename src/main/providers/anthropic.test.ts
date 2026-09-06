@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type Anthropic from '@anthropic-ai/sdk'
-import { toAnthropicMessages, toAnthropicTools, fromAnthropicMessage } from './anthropic'
+import { toAnthropicMessages, toAnthropicTools, fromAnthropicMessage, anthropicClientOptions } from './anthropic'
 import type { Message } from './types'
 
 describe('toAnthropicTools', () => {
@@ -115,5 +115,20 @@ describe('fromAnthropicMessage', () => {
     expect(mk('max_tokens')).toBe('max_tokens')
     expect(mk('refusal')).toBe('refusal')
     expect(mk('stop_sequence')).toBe('end')
+  })
+})
+
+describe('anthropicClientOptions', () => {
+  it('omits the workspace header when no workspace id is set', () => {
+    expect(anthropicClientOptions('sk-1')).toEqual({ apiKey: 'sk-1', maxRetries: 2 })
+    expect(anthropicClientOptions('sk-1', '  ')).toEqual({ apiKey: 'sk-1', maxRetries: 2 })
+  })
+
+  it('sends the anthropic-workspace-id header when a workspace id is set', () => {
+    expect(anthropicClientOptions('sk-1', ' wrkspc_01 ')).toEqual({
+      apiKey: 'sk-1',
+      maxRetries: 2,
+      defaultHeaders: { 'anthropic-workspace-id': 'wrkspc_01' }
+    })
   })
 })

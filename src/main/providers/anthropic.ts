@@ -70,18 +70,23 @@ export function fromAnthropicMessage(msg: Anthropic.Message): ChatResponse {
   return { parts, stopReason: mapStopReason(msg.stop_reason), raw: { provider: 'anthropic', content: msg.content } }
 }
 
+export function anthropicClientOptions(apiKey: string, workspaceId?: string): ConstructorParameters<typeof Anthropic>[0] {
+  const id = workspaceId?.trim()
+  return { apiKey, maxRetries: 2, ...(id ? { defaultHeaders: { 'anthropic-workspace-id': id } } : {}) }
+}
+
 export const anthropicProvider: ChatProvider = {
   id: 'anthropic',
 
-  async listModels(apiKey, signal) {
-    const client = new Anthropic({ apiKey })
+  async listModels(apiKey, signal, workspaceId) {
+    const client = new Anthropic(anthropicClientOptions(apiKey, workspaceId))
     const ids: string[] = []
     for await (const model of client.models.list({ limit: 100 }, { signal })) ids.push(model.id)
     return ids
   },
 
   async chat(req, onTextDelta) {
-    const client = new Anthropic({ apiKey: req.apiKey, maxRetries: 2 })
+    const client = new Anthropic(anthropicClientOptions(req.apiKey, req.workspaceId))
     const params: Anthropic.MessageStreamParams = {
       model: req.model,
       max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,

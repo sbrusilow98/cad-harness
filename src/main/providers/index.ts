@@ -16,10 +16,14 @@ export function getProvider(id: ProviderId): ChatProvider {
   return providers[id]
 }
 
-export async function listModelsWithFallback(id: ProviderId, apiKey: string | null): Promise<ModelListResult> {
+export async function listModelsWithFallback(
+  id: ProviderId,
+  apiKey: string | null,
+  workspaceId?: string
+): Promise<ModelListResult> {
   if (!apiKey) return { models: FALLBACK_MODELS[id], source: 'fallback', error: 'No API key configured.' }
   try {
-    const models = await getProvider(id).listModels(apiKey, AbortSignal.timeout(15000))
+    const models = await getProvider(id).listModels(apiKey, AbortSignal.timeout(15000), workspaceId)
     if (models.length === 0) throw new Error('The API returned no models.')
     return { models, source: 'api' }
   } catch (err) {

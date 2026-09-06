@@ -82,10 +82,51 @@ function KeysTab() {
               </button>
             )}
           </div>
+          {id === 'anthropic' && <WorkspaceIdField />}
         </div>
       ))}
       {error && <div className="error-text">{error}</div>}
     </>
+  )
+}
+
+function WorkspaceIdField() {
+  const saved = useUiStore((s) => s.settings?.anthropicWorkspaceId ?? '')
+  const [draft, setDraft] = useState(saved)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDraft(saved)
+  }, [saved])
+
+  const commit = async (): Promise<void> => {
+    const value = draft.trim()
+    if (value === saved) return
+    setError(null)
+    try {
+      await useUiStore.getState().updateSettings({ anthropicWorkspaceId: value })
+      void useUiStore.getState().fetchModels('anthropic', true)
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <input
+        className="input mono"
+        placeholder="Workspace ID (only for keys not scoped to a workspace)"
+        value={draft}
+        spellCheck={false}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void commit()
+        }}
+      />
+      <div className="small faint">Sent as the anthropic-workspace-id header. Leave blank for workspace-scoped keys.</div>
+      {error && <div className="error-text">{error}</div>}
+    </div>
   )
 }
 

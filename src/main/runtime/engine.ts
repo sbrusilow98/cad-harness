@@ -9,6 +9,8 @@ import { errorMessage } from '@shared/errors'
 export interface EngineDeps {
   getProvider(id: ProviderId): ChatProvider
   getApiKey(id: ProviderId): Promise<string | null>
+  /** Optional per-provider workspace id (Anthropic keys not scoped to a workspace). */
+  getWorkspaceId?(id: ProviderId): string | undefined
   listMcpTools(grants: ToolGrant[], signal: AbortSignal): Promise<McpListing>
   callMcpTool(ref: ToolRef, args: unknown, signal: AbortSignal): Promise<{ content: string; isError: boolean }>
   limits: RunLimits
@@ -202,7 +204,8 @@ async function executeNode(
           tools: toolSet.defs,
           temperature,
           maxTokens,
-          signal: ctx.signal
+          signal: ctx.signal,
+          workspaceId: deps.getWorkspaceId?.(node.provider)
         },
         (delta) => deps.emit({ type: 'node.text', runId, executionId, delta })
       )

@@ -72,6 +72,10 @@ async function collectMcpTools(ctx: MainContext, grants: ToolGrant[], signal?: A
   return { tools, warnings }
 }
 
+function workspaceIdFor(ctx: MainContext, provider: ProviderId): string | undefined {
+  return provider === 'anthropic' ? ctx.settings.get().anthropicWorkspaceId : undefined
+}
+
 export function registerIpc(ctx: MainContext): void {
   const runs = new Map<string, AbortController>()
 
@@ -125,7 +129,9 @@ export function registerIpc(ctx: MainContext): void {
     ctx.secrets.clear(provider)
   })
 
-  ipcMain.handle(IPC.listModels, (_event, provider: ProviderId) => listModelsWithFallback(provider, ctx.secrets.get(provider)))
+  ipcMain.handle(IPC.listModels, (_event, provider: ProviderId) =>
+    listModelsWithFallback(provider, ctx.secrets.get(provider), workspaceIdFor(ctx, provider))
+  )
 
   ipcMain.handle(IPC.testMcp, async (_event, config: McpServerConfig): Promise<McpToolListResult> => {
     try {
@@ -156,6 +162,7 @@ export function registerIpc(ctx: MainContext): void {
     const deps: EngineDeps = {
       getProvider,
       getApiKey: async (id) => ctx.secrets.get(id),
+      getWorkspaceId: (id) => workspaceIdFor(ctx, id),
       listMcpTools: (grants, signal) => collectMcpTools(ctx, grants, signal),
       callMcpTool: (ref, args, signal) => ctx.mcp.callTool(ref, args, signal),
       limits: ctx.settings.get().limits,
