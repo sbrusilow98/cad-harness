@@ -141,12 +141,6 @@ export function createOpenAICompatibleProvider(opts: OpenAICompatibleOptions): C
   }
 }
 
-export const openaiProvider = createOpenAICompatibleProvider({
-  id: 'openai',
-  maxTokensParam: 'max_completion_tokens',
-  filterModels: isOpenAIChatModel
-})
-
 export const fireworksProvider = createOpenAICompatibleProvider({
   id: 'fireworks',
   baseURL: 'https://api.fireworks.ai/inference/v1',

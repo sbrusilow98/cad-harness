@@ -1,4 +1,5 @@
 import { DEFAULT_MODELS, PROVIDER_IDS, PROVIDER_LABELS, type AgentNode, type ProviderId } from '@shared/types'
+import { supportsTemperature } from '@shared/model-capabilities'
 import { useGraphStore } from '@/store/graph'
 import { ModelCombo } from './ModelCombo'
 import { ToolPicker } from './ToolPicker'
@@ -6,13 +7,14 @@ import { ToolPicker } from './ToolPicker'
 interface NumberFieldProps {
   label: string
   value: number | undefined
+  disabled?: boolean
   min?: number
   max?: number
   step?: number
   onChange: (value: number | undefined) => void
 }
 
-function NumberField({ label, value, min, max, step, onChange }: NumberFieldProps) {
+function NumberField({ label, value, min, max, step, disabled, onChange }: NumberFieldProps) {
   return (
     <div className="field number-field">
       <label className="label">{label}</label>
@@ -23,7 +25,8 @@ function NumberField({ label, value, min, max, step, onChange }: NumberFieldProp
         min={min}
         max={max}
         step={step}
-        placeholder="default"
+        disabled={disabled}
+        placeholder={disabled ? 'not supported' : 'default'}
         onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
       />
     </div>
@@ -36,6 +39,7 @@ interface Props {
 
 export function NodeInspector({ node }: Props) {
   const isEntry = useGraphStore((s) => s.graph.entryNodeId === node.id)
+  const allowsTemperature = supportsTemperature(node.provider, node.model)
   const update = (patch: Partial<AgentNode>): void => useGraphStore.getState().updateNode(node.id, patch)
 
   return (
@@ -99,11 +103,23 @@ export function NodeInspector({ node }: Props) {
       <div className="inspector-section">
         <div className="inspector-title">Sampling and limits</div>
         <div className="row" style={{ alignItems: 'flex-start' }}>
-          <NumberField label="Temperature" value={node.temperature} min={0} max={2} step={0.1} onChange={(v) => update({ temperature: v })} />
+          <NumberField
+            label="Temperature"
+            value={node.temperature}
+            min={0}
+            max={2}
+            step={0.1}
+            disabled={!allowsTemperature}
+            onChange={(v) => update({ temperature: v })}
+          />
           <NumberField label="Max tokens" value={node.maxTokens} min={1} step={1} onChange={(v) => update({ maxTokens: v })} />
           <NumberField label="Max turns" value={node.maxTurns} min={1} step={1} onChange={(v) => update({ maxTurns: v })} />
         </div>
-        <div className="small faint">Blank uses the provider default. The newest Claude models reject temperature.</div>
+        <div className="small faint">
+          {allowsTemperature
+            ? 'Blank uses the provider default.'
+            : `${node.model} does not accept a temperature, so it is ignored for this agent.`}
+        </div>
       </div>
     </>
   )

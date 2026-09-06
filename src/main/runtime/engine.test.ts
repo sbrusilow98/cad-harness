@@ -270,11 +270,18 @@ describe('runGraph', () => {
     h.deps.listMcpTools = async () => ({ tools: [], warnings: ['server gone'] })
     const g = graph([], ['a'])
     g.nodes[0].instructions = 'be brief'
+    g.nodes[0].model = 'claude-opus-4-6'
     g.nodes[0].temperature = 0.2
     g.nodes[0].maxTokens = 500
     await run(h, g)
     expect(h.events[2]).toEqual({ type: 'run.warning', runId: 'r1', message: 'server gone' })
-    expect(h.provider.requests[0]).toMatchObject({ system: 'be brief', temperature: 0.2, maxTokens: 500, model: 'claude-opus-5', apiKey: 'key' })
+    expect(h.provider.requests[0]).toMatchObject({
+      system: 'be brief',
+      temperature: 0.2,
+      maxTokens: 500,
+      model: 'claude-opus-4-6',
+      apiKey: 'key'
+    })
   })
 })
 
@@ -325,9 +332,38 @@ describe('runGraph limits and empty messages', () => {
   it('passes an in-range temperature through to the provider', async () => {
     const h = harness([text('done')])
     const g = graph([], ['a'])
+    g.nodes[0].model = 'claude-opus-4-6'
     g.nodes[0].temperature = 0.5
     await run(h, g)
     expect(h.provider.requests[0].temperature).toBe(0.5)
+  })
+
+  it('drops the temperature and warns for a model that rejects it', async () => {
+    const h = harness([text('a'), text('b')])
+    const g = graph([{ id: 'e1', source: 'a', target: 'b', kind: 'handoff' }], ['a', 'b'])
+    for (const node of g.nodes) {
+      node.model = 'claude-opus-5'
+      node.temperature = 0.5
+    }
+    await run(h, g)
+    expect(h.provider.requests[0].temperature).toBeUndefined()
+    expect(h.provider.requests[1].temperature).toBeUndefined()
+    const warnings = h.events.filter((e) => e.type === 'run.warning') as { message: string }[]
+    expect(warnings.map((w) => w.message)).toEqual([
+      '"claude-opus-5" does not accept a temperature, so the one set on "A" was ignored.',
+      '"claude-opus-5" does not accept a temperature, so the one set on "B" was ignored.'
+    ])
+    expect(h.events.at(-1)).toMatchObject({ type: 'run.finished' })
+  })
+
+  it('warns only once when the same agent runs repeatedly', async () => {
+    const h = harness([text('1'), text('2'), text('3')])
+    const g = graph([{ id: 'e1', source: 'a', target: 'a', kind: 'handoff' }], ['a'])
+    g.nodes[0].model = 'claude-opus-5'
+    g.nodes[0].temperature = 0.5
+    h.deps.limits = { ...h.deps.limits, maxTotalSteps: 3 }
+    await run(h, g)
+    expect(h.events.filter((e) => e.type === 'run.warning')).toHaveLength(1)
   })
 
   it('rejects a delegate call with no task instead of running the child', async () => {

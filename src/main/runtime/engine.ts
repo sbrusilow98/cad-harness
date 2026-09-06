@@ -4,6 +4,7 @@ import { textOf, toolCallsOf, type ChatProvider, type Message, type ToolCallPart
 import { ToolNameRegistry, type ToolRef } from '../mcp/naming'
 import { buildNodeToolSet, HANDOFF_TOOL, type McpToolInfo, type NodeToolSet } from './graph-tools'
 import { hasErrors, validateGraph } from './validate'
+import { supportsTemperature } from '@shared/model-capabilities'
 import { errorMessage } from '@shared/errors'
 
 export interface EngineDeps {
@@ -181,13 +182,22 @@ async function executeNode(
       typeof node.maxTokens === 'number' && Number.isFinite(node.maxTokens) && node.maxTokens >= 1
         ? Math.floor(node.maxTokens)
         : undefined
-    const temperature =
+    const requested =
       typeof node.temperature === 'number' &&
       Number.isFinite(node.temperature) &&
       node.temperature >= 0 &&
       node.temperature <= 2
         ? node.temperature
         : undefined
+    const allowsTemperature = supportsTemperature(node.provider, node.model)
+    const temperature = allowsTemperature ? requested : undefined
+    if (requested !== undefined && !allowsTemperature) {
+      const message = `"${node.model}" does not accept a temperature, so the one set on "${node.name}" was ignored.`
+      if (!ctx.warned.has(message)) {
+        ctx.warned.add(message)
+        deps.emit({ type: 'run.warning', runId, message })
+      }
+    }
 
     for (let turn = 0; turn < maxTurns; turn++) {
       throwIfCancelled(ctx)
