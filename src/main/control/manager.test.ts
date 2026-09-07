@@ -144,6 +144,29 @@ describe('ControlManager', () => {
     await rebound.close()
   })
 
+  it('survives secure storage being unavailable, and reports the error only when enabled', async () => {
+    let settings: Settings = { ...DEFAULT_SETTINGS, remoteControl: { enabled: true, port: 0 } }
+    const secrets = new Map<string, string>()
+    const manager = new ControlManager({
+      settings: { get: () => settings },
+      secrets: {
+        get: (name) => secrets.get(name) ?? null,
+        set: () => {
+          throw new Error('Secure storage is not available on this system, so API keys cannot be saved.')
+        }
+      },
+      buildControlDeps: controlDeps
+    })
+    open = manager
+    const failed = await manager.sync()
+    expect(failed.url).toBeNull()
+    expect(failed.error).toMatch(/secure storage/i)
+
+    settings = { ...settings, remoteControl: { enabled: false, port: 0 } }
+    const disabled = await manager.sync()
+    expect(disabled.error).toBeNull()
+  })
+
   it('reads the status without minting a token, and reports the bound port', async () => {
     const f = fixture()
     open = f.manager

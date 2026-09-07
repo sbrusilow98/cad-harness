@@ -55,7 +55,16 @@ export class ControlManager {
 
   private async applySync(): Promise<ControlStatus> {
     const wanted = this.deps.settings.get().remoteControl
-    const token = this.token()
+    let token: string
+    try {
+      token = this.token()
+    } catch (err) {
+      // Without secure storage there is no token worth guarding the listener with, so stay
+      // stopped. The error only matters to someone who asked for the listener.
+      await this.applyStop()
+      if (wanted.enabled) this.error = errorMessage(err)
+      return this.status()
+    }
 
     if (!wanted.enabled) {
       await this.applyStop()
