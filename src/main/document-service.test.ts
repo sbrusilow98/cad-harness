@@ -81,4 +81,20 @@ describe('DocumentService', () => {
     expect(service.get().graph.nodes).toHaveLength(1)
     spy.mockRestore()
   })
+
+  it('hands out a document a caller cannot rewrite', () => {
+    const { service } = make()
+    const document = service.get()
+    expect(Object.isFrozen(document)).toBe(true)
+    expect(() => {
+      ;(document as { dirty: boolean }).dirty = true
+    }).toThrow(TypeError)
+    expect(service.get().dirty).toBe(false)
+
+    const result = service.mutate((graph) => addAgent(graph, { name: 'Router' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.isFrozen(result.document)).toBe(true)
+    expect(Object.isFrozen(service.replace(graphWithOne(), null, false))).toBe(true)
+  })
 })

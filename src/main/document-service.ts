@@ -13,13 +13,18 @@ export interface OpenDocument {
 
 export type MutationResult<T> = { ok: true; value: T; document: OpenDocument } | { ok: false; error: string }
 
+/** Frozen so a caller holding a returned document cannot rewrite the service's state through it. */
+function seal(document: OpenDocument): OpenDocument {
+  return Object.freeze(document)
+}
+
 /**
  * Main's mirror of the document open in the window. The renderer stays where a human edits and
  * reports its changes here; the control surface reads and writes through `mutate`, which pushes the
  * result back to the window. Renderer syncs never push, so a local edit cannot echo.
  */
 export class DocumentService {
-  private document: OpenDocument = { graph: emptyGraph(), path: null, dirty: false, revision: 0 }
+  private document: OpenDocument = seal({ graph: emptyGraph(), path: null, dirty: false, revision: 0 })
 
   constructor(private readonly push: (document: OpenDocument) => void) {}
 
@@ -28,11 +33,11 @@ export class DocumentService {
   }
 
   syncFromRenderer(input: { graph: Graph; path: string | null; dirty: boolean }): void {
-    this.document = { ...input, revision: this.document.revision + 1 }
+    this.document = seal({ ...input, revision: this.document.revision + 1 })
   }
 
   replace(graph: Graph, path: string | null, dirty: boolean): OpenDocument {
-    this.document = { graph, path, dirty, revision: this.document.revision + 1 }
+    this.document = seal({ graph, path, dirty, revision: this.document.revision + 1 })
     this.publish()
     return this.document
   }
@@ -42,7 +47,7 @@ export class DocumentService {
     if (!result.ok) return result
     const problem = structuralProblem(result.graph)
     if (problem) return { ok: false, error: problem }
-    this.document = { graph: result.graph, path: this.document.path, dirty: true, revision: this.document.revision + 1 }
+    this.document = seal({ graph: result.graph, path: this.document.path, dirty: true, revision: this.document.revision + 1 })
     this.publish()
     return { ok: true, value: result.value, document: this.document }
   }
