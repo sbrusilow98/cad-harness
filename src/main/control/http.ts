@@ -29,9 +29,8 @@ function sendJson(res: ServerResponse, status: number, payload: unknown): void {
 
 /** Compares in constant time so the token cannot be guessed a character at a time. */
 function authorized(header: string | undefined, token: string): boolean {
-  const prefix = 'Bearer '
-  if (!header || !header.startsWith(prefix)) return false
-  const given = Buffer.from(header.slice(prefix.length).trim(), 'utf8')
+  if (!header || header.slice(0, 7).toLowerCase() !== 'bearer ') return false
+  const given = Buffer.from(header.slice(7).trim(), 'utf8')
   const expected = Buffer.from(token, 'utf8')
   if (given.length !== expected.length) return false
   return timingSafeEqual(given, expected)
@@ -88,6 +87,11 @@ export async function startControlListener(options: ControlListenerOptions): Pro
       httpServer.removeListener('error', onError)
       resolve()
     })
+  })
+
+  // Without this, a post-bind error would be an unhandled 'error' event and would end the process.
+  httpServer.on('error', (err: Error) => {
+    console.error('The remote control listener errored:', errorMessage(err))
   })
 
   const address = httpServer.address()

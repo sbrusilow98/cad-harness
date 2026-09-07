@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { ControlManager, CONTROL_TOKEN_KEY } from './manager'
+import { startControlListener } from './http'
 import type { ControlDeps } from './deps'
 import { DocumentService } from '../document-service'
 import { RunService } from '../run-service'
@@ -119,5 +120,42 @@ describe('ControlManager', () => {
     expect(failed.url).toBeNull()
     expect(failed.error).toMatch(/EADDRINUSE|address already in use/i)
     await second.manager.stop()
+  })
+
+  it('does not start a second listener when sync is called concurrently', async () => {
+    const probe = fixture()
+    probe.setSettings({ remoteControl: { enabled: true, port: 0 } })
+    const started = await probe.manager.sync()
+    const port = Number(new URL(started.url!).port)
+    await probe.manager.stop()
+
+    const f = fixture()
+    open = f.manager
+    f.setSettings({ remoteControl: { enabled: true, port } })
+    const [first, second] = await Promise.all([f.manager.sync(), f.manager.sync()])
+    expect(first.error).toBeNull()
+    expect(second.error).toBeNull()
+    expect(first.url).toBe(second.url)
+
+    await f.manager.stop()
+    // If a listener had been orphaned, this bind would fail with EADDRINUSE.
+    const rebound = await startControlListener({ port, token: 'c'.repeat(64), deps: controlDeps() })
+    expect(rebound.port).toBe(port)
+    await rebound.close()
+  })
+
+  it('reads the status without minting a token, and reports the bound port', async () => {
+    const f = fixture()
+    open = f.manager
+    expect(f.manager.status().token).toBe('')
+    expect(f.secrets.size).toBe(0)
+
+    f.setSettings({ remoteControl: { enabled: true, port: 0 } })
+    const started = await f.manager.sync()
+    expect(started.token).toHaveLength(64)
+    expect(started.port).toBe(Number(new URL(started.url!).port))
+
+    await f.manager.stop()
+    expect(f.manager.status().error).toBeNull()
   })
 })

@@ -77,4 +77,18 @@ describe('control listener', () => {
     listener = await startControlListener({ port: 0, token: TOKEN, deps: deps() })
     await expect(startControlListener({ port: listener.port, token: TOKEN, deps: deps() })).rejects.toThrow(/EADDRINUSE|address already in use/i)
   })
+
+  it('accepts a lower-case bearer scheme', async () => {
+    listener = await startControlListener({ port: 0, token: TOKEN, deps: deps() })
+    const response = await fetch(listener.url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        Authorization: `bearer ${TOKEN}`
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    })
+    expect(response.status).toBe(200)
+  })
 })

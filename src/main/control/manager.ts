@@ -26,6 +26,7 @@ export class ControlManager {
   private listener: ControlListener | null = null
   private startedWith: { port: number; token: string } | null = null
   private error: string | null = null
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(private readonly deps: ControlManagerDeps) {}
 
@@ -33,20 +34,31 @@ export class ControlManager {
     const settings = this.deps.settings.get().remoteControl
     return {
       enabled: settings.enabled,
-      port: settings.port,
+      port: this.listener?.port ?? settings.port,
       url: this.listener?.url ?? null,
-      token: this.token(),
+      token: this.deps.secrets.get(CONTROL_TOKEN_KEY) ?? '',
       error: this.error
     }
   }
 
+  /** Serializes lifecycle work so two callers cannot start a second listener over a live one. */
+  private enqueue<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(work, work)
+    this.queue = run.catch(() => undefined)
+    return run
+  }
+
   /** Starts, stops, or restarts the listener so it matches the current settings. */
   async sync(): Promise<ControlStatus> {
+    return this.enqueue(() => this.applySync())
+  }
+
+  private async applySync(): Promise<ControlStatus> {
     const wanted = this.deps.settings.get().remoteControl
     const token = this.token()
 
     if (!wanted.enabled) {
-      await this.stop()
+      await this.applyStop()
       this.error = null
       return this.status()
     }
@@ -54,7 +66,7 @@ export class ControlManager {
     const unchanged = this.listener !== null && this.startedWith?.port === wanted.port && this.startedWith.token === token
     if (unchanged) return this.status()
 
-    await this.stop()
+    await this.applyStop()
     try {
       this.listener = await startControlListener({ port: wanted.port, token, deps: this.deps.buildControlDeps() })
       this.startedWith = { port: wanted.port, token }
@@ -69,14 +81,18 @@ export class ControlManager {
 
   async regenerateToken(): Promise<ControlStatus> {
     this.deps.secrets.set(CONTROL_TOKEN_KEY, randomBytes(32).toString('hex'))
-    await this.stop()
     return this.sync()
   }
 
   async stop(): Promise<void> {
+    return this.enqueue(() => this.applyStop())
+  }
+
+  private async applyStop(): Promise<void> {
     const listener = this.listener
     this.listener = null
     this.startedWith = null
+    this.error = null
     await listener?.close()
   }
 
