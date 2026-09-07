@@ -1,6 +1,7 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ControlDeps } from './deps'
 import { describeDocument, registerDocumentTools } from './tools-document'
+import { describeRun, registerRunTools } from './tools-runs'
 
 export const CONTROL_SERVER_INFO = { name: 'agent-graph', version: '0.1.0' } as const
 
@@ -12,6 +13,7 @@ export function buildControlServer(deps: ControlDeps): McpServer {
   })
 
   registerDocumentTools(server, deps)
+  registerRunTools(server, deps)
 
   server.registerResource(
     'document',
@@ -26,6 +28,20 @@ export function buildControlServer(deps: ControlDeps): McpServer {
         }
       ]
     })
+  )
+
+  server.registerResource(
+    'run',
+    new ResourceTemplate('agentgraph://runs/{runId}', { list: undefined }),
+    { title: 'Run transcript', description: 'One run and its transcript.', mimeType: 'application/json' },
+    (uri, variables) => {
+      const runId = String(variables['runId'])
+      const record = deps.runs.get(runId)
+      if (!record) throw new Error(`No run with id "${runId}".`)
+      return {
+        contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(describeRun(record), null, 2) }]
+      }
+    }
   )
 
   return server
