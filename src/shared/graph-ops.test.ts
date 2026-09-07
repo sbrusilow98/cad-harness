@@ -97,6 +97,26 @@ describe('updateAgent', () => {
   it('rejects an unknown agent', () => {
     expect(updateAgent(graphWith(['Router']), 'Ghost', { name: 'x' }).ok).toBe(false)
   })
+
+  it('clears an optional field when the patch passes null, and leaves it alone when the key is absent', () => {
+    const g = graphWith(['Router'])
+    const set = updateAgent(g, 'Router', { temperature: 0.5, maxTokens: 100, maxTurns: 3 })
+    expect(set.ok).toBe(true)
+    if (!set.ok) return
+    expect(set.value).toMatchObject({ temperature: 0.5, maxTokens: 100, maxTurns: 3 })
+
+    const untouched = updateAgent(set.graph, 'Router', { instructions: 'x' })
+    expect(untouched.ok).toBe(true)
+    if (!untouched.ok) return
+    expect(untouched.value.temperature).toBe(0.5)
+
+    const cleared = updateAgent(set.graph, 'Router', { temperature: null, maxTokens: null, maxTurns: null })
+    expect(cleared.ok).toBe(true)
+    if (!cleared.ok) return
+    expect('temperature' in cleared.value).toBe(false)
+    expect('maxTokens' in cleared.value).toBe(false)
+    expect('maxTurns' in cleared.value).toBe(false)
+  })
 })
 
 describe('removeAgent', () => {
@@ -186,5 +206,14 @@ describe('structuralProblem', () => {
     expect(structuralProblem(dangling)).toMatch(/edge/i)
     const duplicate = { ...g, nodes: [...g.nodes, g.nodes[0]] }
     expect(structuralProblem(duplicate)).toMatch(/id/i)
+  })
+
+  it('names a duplicate edge id', () => {
+    const g = graphWith(['Router', 'Writer'])
+    const made = connect(g, 'Router', 'Writer', 'handoff')
+    expect(made.ok).toBe(true)
+    if (!made.ok) return
+    const duplicated = { ...made.graph, edges: [made.value, { ...made.value, kind: 'delegate' as const }] }
+    expect(structuralProblem(duplicated)).toBe(`Two edges share the id "${made.value.id}".`)
   })
 })

@@ -17,7 +17,12 @@ export interface AgentSpec {
   maxTurns?: number
 }
 
-export type AgentPatch = Partial<Omit<AgentSpec, 'entry'>>
+/** `null` clears an optional field; an absent key leaves it unchanged. */
+export type AgentPatch = Partial<Omit<AgentSpec, 'entry' | 'temperature' | 'maxTokens' | 'maxTurns'>> & {
+  temperature?: number | null
+  maxTokens?: number | null
+  maxTurns?: number | null
+}
 
 const COLUMNS = 4
 const COLUMN_WIDTH = 280
@@ -112,9 +117,15 @@ export function updateAgent(graph: Graph, reference: string, patch: AgentPatch):
   if (patch.instructions !== undefined) updated.instructions = patch.instructions
   if (patch.tools !== undefined) updated.tools = patch.tools
   if (patch.position !== undefined) updated.position = patch.position
-  if (patch.temperature !== undefined) updated.temperature = patch.temperature
-  if (patch.maxTokens !== undefined) updated.maxTokens = patch.maxTokens
-  if (patch.maxTurns !== undefined) updated.maxTurns = patch.maxTurns
+  const assign = (key: 'temperature' | 'maxTokens' | 'maxTurns'): void => {
+    const value = patch[key]
+    if (value === undefined) return
+    if (value === null) delete updated[key]
+    else updated[key] = value
+  }
+  assign('temperature')
+  assign('maxTokens')
+  assign('maxTurns')
   const nodes = graph.nodes.map((n) => (n.id === updated.id ? updated : n))
   return { ok: true, graph: withNodes(graph, nodes), value: updated }
 }
@@ -203,7 +214,10 @@ export function structuralProblem(graph: Graph): string | null {
     if (ids.has(node.id)) return `Two agents share the id "${node.id}".`
     ids.add(node.id)
   }
+  const edgeIds = new Set<string>()
   for (const edge of graph.edges) {
+    if (edgeIds.has(edge.id)) return `Two edges share the id "${edge.id}".`
+    edgeIds.add(edge.id)
     if (!ids.has(edge.source) || !ids.has(edge.target)) return `Edge "${edge.id}" points at an agent that does not exist.`
   }
   if (graph.entryNodeId !== null && !ids.has(graph.entryNodeId)) return 'The entry agent does not exist.'
