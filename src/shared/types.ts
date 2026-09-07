@@ -68,10 +68,18 @@ export interface RunLimits {
 
 export type Theme = 'light' | 'dark'
 
+export interface RemoteControlSettings {
+  enabled: boolean
+  port: number
+}
+
+export const DEFAULT_REMOTE_CONTROL: RemoteControlSettings = { enabled: false, port: 4820 }
+
 export interface Settings {
   theme: Theme
   mcpServers: McpServerConfig[]
   limits: RunLimits
+  remoteControl: RemoteControlSettings
   recentFiles: string[]
   /** Required only for Anthropic API keys that are not scoped to a workspace. */
   anthropicWorkspaceId?: string
@@ -83,5 +91,6 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   mcpServers: [],
   limits: DEFAULT_LIMITS,
+  remoteControl: DEFAULT_REMOTE_CONTROL,
   recentFiles: []
 }

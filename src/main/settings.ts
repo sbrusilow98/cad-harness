@@ -1,5 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { DEFAULT_SETTINGS, type McpServerConfig, type Settings } from '@shared/types'
+import {
+  DEFAULT_REMOTE_CONTROL,
+  DEFAULT_SETTINGS,
+  type McpServerConfig,
+  type RemoteControlSettings,
+  type Settings
+} from '@shared/types'
 import { writeFileAtomic } from './fs-utils'
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -30,6 +36,11 @@ export function normalizeSettings(raw: unknown): Settings {
   const limits = (r.limits && typeof r.limits === 'object' ? r.limits : {}) as Partial<Settings['limits']>
   const pick = (value: unknown, fallback: number): number =>
     typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+  const remote = (r.remoteControl && typeof r.remoteControl === 'object' ? r.remoteControl : {}) as Partial<RemoteControlSettings>
+  const port =
+    typeof remote.port === 'number' && Number.isInteger(remote.port) && remote.port >= 1 && remote.port <= 65535
+      ? remote.port
+      : DEFAULT_REMOTE_CONTROL.port
   return {
     theme: r.theme === 'light' ? 'light' : 'dark',
     mcpServers: Array.isArray(r.mcpServers) ? r.mcpServers.filter(isServerConfig) : [],
@@ -38,6 +49,7 @@ export function normalizeSettings(raw: unknown): Settings {
       maxDelegationDepth: pick(limits.maxDelegationDepth, DEFAULT_SETTINGS.limits.maxDelegationDepth),
       maxTotalSteps: pick(limits.maxTotalSteps, DEFAULT_SETTINGS.limits.maxTotalSteps)
     },
+    remoteControl: { enabled: remote.enabled === true, port },
     recentFiles: Array.isArray(r.recentFiles) ? r.recentFiles.filter((f): f is string => typeof f === 'string') : [],
     ...(typeof r.anthropicWorkspaceId === 'string' && r.anthropicWorkspaceId.trim()
       ? { anthropicWorkspaceId: r.anthropicWorkspaceId.trim() }

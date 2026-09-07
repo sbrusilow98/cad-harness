@@ -16,6 +16,7 @@ describe('normalizeSettings', () => {
       theme: 'dark',
       mcpServers: [],
       limits: { maxTurns: 3, maxDelegationDepth: 5, maxTotalSteps: 200 },
+      remoteControl: { enabled: false, port: 4820 },
       recentFiles: ['a']
     })
   })
@@ -76,5 +77,14 @@ describe('normalizeSettings anthropicWorkspaceId', () => {
     expect(normalizeSettings({ anthropicWorkspaceId: ' wrkspc_01 ' }).anthropicWorkspaceId).toBe('wrkspc_01')
     expect(normalizeSettings({ anthropicWorkspaceId: '   ' })).not.toHaveProperty('anthropicWorkspaceId')
     expect(normalizeSettings({ anthropicWorkspaceId: 42 })).not.toHaveProperty('anthropicWorkspaceId')
+  })
+})
+
+describe('normalizeSettings remoteControl', () => {
+  it('defaults to disabled on port 4820 and rejects a bad port', () => {
+    expect(normalizeSettings({}).remoteControl).toEqual({ enabled: false, port: 4820 })
+    expect(normalizeSettings({ remoteControl: { enabled: true, port: 5000 } }).remoteControl).toEqual({ enabled: true, port: 5000 })
+    expect(normalizeSettings({ remoteControl: { enabled: 'yes', port: 0 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
+    expect(normalizeSettings({ remoteControl: { port: 70000 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
   })
 })
