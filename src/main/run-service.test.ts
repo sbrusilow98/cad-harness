@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { RunService, MAX_EXECUTION_TEXT, MAX_TOOL_RESULT, type RunServiceDeps } from './run-service'
+import { RunService, MAX_EXECUTION_TEXT, MAX_TOOL_RESULT, MAX_RUNS, type RunServiceDeps } from './run-service'
 import type { RunEvent } from '@shared/events'
 import { emptyGraph, createAgentNode } from '@shared/graph-defaults'
 import type { Graph } from '@shared/types'
@@ -89,16 +89,50 @@ describe('RunService', () => {
     expect(h.service.stop('nope')).toBe(false)
   })
 
-  it('marks a run errored when the engine rejects', async () => {
+  it('tells the windows when the engine itself fails', async () => {
     const broadcast: RunEvent[] = []
-    const deps: RunServiceDeps = {
+    const service = new RunService({
       broadcast: (event) => broadcast.push(event),
       startRun: () => Promise.reject(new Error('engine exploded'))
-    }
-    const service = new RunService(deps)
+    })
     const runId = service.start(graph(), 'x')
-    const record = await service.wait(runId, 1000)
-    expect(record).toMatchObject({ status: 'error', error: 'engine exploded' })
+    await service.wait(runId, 1000)
+    expect(broadcast.map((e) => e.type)).toContain('run.error')
+    expect(service.get(runId)).toMatchObject({ status: 'error', error: 'engine exploded' })
+  })
+
+  it('evicts finished runs but never one still in flight', () => {
+    const h = harness()
+    const live = h.service.start(graph(), 'live')
+    for (let i = 0; i < MAX_RUNS; i++) {
+      const id = h.service.start(graph(), `run ${i}`)
+      const emit = h.emitters[h.emitters.length - 1]
+      emit({ type: 'run.started', runId: id })
+      emit({ type: 'run.finished', runId: id, output: 'done' })
+      h.settle[h.settle.length - 1]()
+    }
+    expect(h.service.get(live)).toBeDefined()
+    expect(h.service.stop(live)).toBe(true)
+  })
+
+  it('reports that a finished run cannot be stopped again', async () => {
+    const h = harness()
+    const runId = h.service.start(graph(), 'x')
+    h.emitters[0]({ type: 'run.started', runId })
+    h.emitters[0]({ type: 'run.cancelled', runId })
+    h.settle[0]()
+    const record = await h.service.wait(runId, 1000)
+    expect(record).toMatchObject({ status: 'cancelled' })
+    expect(record?.finishedAt).not.toBeNull()
+    expect(h.service.stop(runId)).toBe(false)
+  })
+
+  it('aborts every run in flight when the app stops them all', () => {
+    const h = harness()
+    h.service.start(graph(), 'one')
+    h.service.start(graph(), 'two')
+    h.service.stopAll()
+    expect(h.signals.every((s) => s.aborted)).toBe(true)
   })
 
   it('truncates long streamed text and long tool results', async () => {

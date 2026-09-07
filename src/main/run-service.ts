@@ -91,13 +91,12 @@ export class RunService {
       .startRun({ runId, graph, input, signal: entry.controller.signal, emit })
       .catch((err: unknown) => {
         // The engine reports its own failures as events; this is the last resort.
-        if (entry.state.status === 'running') {
-          entry.state = { ...entry.state, status: 'error', error: errorMessage(err) }
-        }
+        if (entry.state.status === 'running') emit({ type: 'run.error', runId, error: errorMessage(err) })
       })
       .finally(() => {
         if (entry.finishedAt === null) entry.finishedAt = new Date().toISOString()
         for (const waiter of entry.waiters.splice(0)) waiter()
+        this.evict()
       })
 
     return runId
@@ -105,7 +104,7 @@ export class RunService {
 
   stop(runId: string): boolean {
     const entry = this.entries.get(runId)
-    if (!entry) return false
+    if (!entry || entry.finishedAt !== null) return false
     entry.controller.abort()
     return true
   }
@@ -138,7 +137,7 @@ export class RunService {
         if (settled) return
         settled = true
         clearTimeout(timer)
-        resolve(this.get(runId))
+        resolve(toRecord(entry))
       }
       const timer = setTimeout(finish, timeoutMs)
       entry.waiters.push(finish)
@@ -169,11 +168,12 @@ export class RunService {
     return event
   }
 
+  /** Drops the oldest finished runs. A run still in flight is never evicted: its abort handle is the only way to stop it. */
   private evict(): void {
-    while (this.entries.size > MAX_RUNS) {
-      const oldest = this.entries.keys().next()
-      if (oldest.done) return
-      this.entries.delete(oldest.value)
+    if (this.entries.size <= MAX_RUNS) return
+    for (const [id, entry] of this.entries) {
+      if (this.entries.size <= MAX_RUNS) return
+      if (entry.finishedAt !== null) this.entries.delete(id)
     }
   }
 }
