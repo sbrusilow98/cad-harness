@@ -81,6 +81,25 @@ describe('RunService', () => {
     }
   })
 
+  it('clamps a wait timeout beyond the 32-bit timer range instead of firing immediately', async () => {
+    vi.useFakeTimers()
+    try {
+      const h = harness()
+      const runId = h.service.start(graph(), 'x')
+      h.emitters[0]({ type: 'run.started', runId })
+      let settled = false
+      void h.service.wait(runId, 1e15).then(() => {
+        settled = true
+      })
+      await vi.advanceTimersByTimeAsync(2_147_483_647 - 1)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(2)
+      expect(settled).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stops a run through its abort signal and reports an unknown id', () => {
     const h = harness()
     const runId = h.service.start(graph(), 'x')

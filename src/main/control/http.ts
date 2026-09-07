@@ -41,7 +41,13 @@ export async function startControlListener(options: ControlListenerOptions): Pro
   let boundPort = options.port
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? HOST}`)
+    let url: URL
+    try {
+      url = new URL(req.url ?? '/', `http://${req.headers.host ?? HOST}`)
+    } catch {
+      sendJson(res, 400, { error: 'The Host header is malformed.' })
+      return
+    }
     if (url.pathname !== CONTROL_PATH) {
       sendJson(res, 404, { error: `Nothing here. The MCP endpoint is ${CONTROL_PATH}.` })
       return

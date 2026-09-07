@@ -102,6 +102,7 @@ export class RunService {
     return runId
   }
 
+  /** Aborts the run's signal. False when no run has that id, or the run is already finished. */
   stop(runId: string): boolean {
     const entry = this.entries.get(runId)
     if (!entry || entry.finishedAt !== null) return false
@@ -139,7 +140,8 @@ export class RunService {
         clearTimeout(timer)
         resolve(toRecord(entry))
       }
-      const timer = setTimeout(finish, timeoutMs)
+      // setTimeout overflows its 32-bit delay past ~24.8 days; clamp rather than fire at once.
+      const timer = setTimeout(finish, Math.min(Math.max(0, timeoutMs), 2_147_483_647))
       entry.waiters.push(finish)
     })
   }

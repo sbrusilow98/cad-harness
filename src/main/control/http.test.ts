@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { request as httpRequest } from 'node:http'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { startControlListener, type ControlListener } from './http'
@@ -76,6 +77,19 @@ describe('control listener', () => {
   it('reports a port that is already taken', async () => {
     listener = await startControlListener({ port: 0, token: TOKEN, deps: deps() })
     await expect(startControlListener({ port: listener.port, token: TOKEN, deps: deps() })).rejects.toThrow(/EADDRINUSE|address already in use/i)
+  })
+
+  it('answers a malformed Host header with 400', async () => {
+    listener = await startControlListener({ port: 0, token: TOKEN, deps: deps() })
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = httpRequest(
+        { host: '127.0.0.1', port: listener!.port, path: '/mcp', method: 'POST', headers: { host: '[' } },
+        (res) => resolve(res.statusCode ?? 0)
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    expect(status).toBe(400)
   })
 
   it('accepts a lower-case bearer scheme', async () => {

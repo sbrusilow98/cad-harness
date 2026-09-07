@@ -90,5 +90,7 @@ describe('run tools', () => {
     const uri = `agentgraph://runs/${run.payload.runId}`
     const result = await h.client.readResource({ uri })
     expect(JSON.parse((result.contents[0] as { text: string }).text)).toMatchObject({ status: 'finished' })
+
+    await expect(h.client.readResource({ uri: 'agentgraph://runs/nope' })).rejects.toThrow(/nope/)
   })
 })

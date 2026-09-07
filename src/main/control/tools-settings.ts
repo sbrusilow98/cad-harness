@@ -106,7 +106,7 @@ export function registerSettingsTools(server: McpServer, deps: ControlDeps): voi
       const config = found.value
       try {
         const tools = await deps.mcp.test(config)
-        return ok({ id: config.id, name: config.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) })
+        return ok({ ...(redactServer(config) as object), tools: tools.map((t) => ({ name: t.name, description: t.description })) })
       } catch (err) {
         return fail(errorMessage(err))
       }

@@ -43,7 +43,13 @@ export class DocumentService {
   }
 
   mutate<T>(fn: (graph: Graph) => OpsResult<T>): MutationResult<T> {
-    const result = fn(this.document.graph)
+    let result: OpsResult<T>
+    try {
+      result = fn(this.document.graph)
+    } catch (err) {
+      // An op that throws instead of returning ok:false still leaves the document untouched.
+      return { ok: false, error: errorMessage(err) }
+    }
     if (!result.ok) return result
     const problem = structuralProblem(result.graph)
     if (problem) return { ok: false, error: problem }

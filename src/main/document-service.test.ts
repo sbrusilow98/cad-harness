@@ -64,6 +64,17 @@ describe('DocumentService', () => {
     expect(pushed).toEqual([])
   })
 
+  it('reports an operation that throws instead of returning a failure', () => {
+    const { service, pushed } = make()
+    const before = service.get()
+    const result = service.mutate(() => {
+      throw new Error('op exploded')
+    })
+    expect(result).toEqual({ ok: false, error: 'op exploded' })
+    expect(service.get()).toEqual(before)
+    expect(pushed).toEqual([])
+  })
+
   it('replaces the document for a new or opened file and pushes it', () => {
     const { service, pushed } = make()
     const replaced = service.replace(graphWithOne(), '/tmp/b.json', false)

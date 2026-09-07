@@ -68,7 +68,6 @@ export class ControlManager {
 
     if (!wanted.enabled) {
       await this.applyStop()
-      this.error = null
       return this.status()
     }
 
