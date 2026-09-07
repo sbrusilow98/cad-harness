@@ -84,7 +84,7 @@ export function registerDocumentTools(server: McpServer, deps: ControlDeps): voi
 
   server.registerTool(
     'open_graph',
-    { description: 'Open a graph file from disk and show it in the app.', inputSchema: { path: z.string() } },
+    { description: 'Open a graph file from disk and show it in the app. Unsaved changes are discarded.', inputSchema: { path: z.string() } },
     async ({ path }) => {
       try {
         const graph = await deps.readGraphFile(path)
@@ -102,16 +102,26 @@ export function registerDocumentTools(server: McpServer, deps: ControlDeps): voi
       inputSchema: { path: z.string().optional() }
     },
     async ({ path }) => {
-      const document = deps.document.get()
-      const target = path?.trim() || document.path
+      const before = deps.document.get()
+      const target = path?.trim() || before.path
       if (!target) return fail('This graph has no path yet. Call save_graph again with a path.')
       try {
-        await deps.writeGraphFile(target, document.graph)
-        deps.document.replace(document.graph, target, false)
-        return ok({ path: target, saved: true })
+        await deps.writeGraphFile(target, before.graph)
       } catch (err) {
         return fail(errorMessage(err))
       }
+      const after = deps.document.get()
+      if (after.revision === before.revision) {
+        deps.document.replace(before.graph, target, false)
+        return ok({ path: target, saved: true })
+      }
+      // The window changed the graph while it was being written. Keep the newer one and stay dirty.
+      deps.document.replace(after.graph, target, true)
+      return ok({
+        path: target,
+        saved: true,
+        note: 'The graph changed while it was being written, so the file on disk is older than what is open. It is still marked as having unsaved changes.'
+      })
     }
   )
 

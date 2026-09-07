@@ -126,6 +126,32 @@ describe('document tools', () => {
     expect(noPath.text).toContain('path')
   })
 
+  it('keeps the newer graph and stays dirty when the window edits during the write', async () => {
+    let duringWrite: (() => void) | null = null
+    const raced = await harness({
+      writeGraphFile: async () => {
+        duringWrite?.()
+      }
+    })
+    await raced.call('add_agent', { name: 'Router' })
+    duringWrite = () => {
+      const current = raced.deps.document.get()
+      raced.deps.document.syncFromRenderer({
+        graph: { ...current.graph, name: 'Edited in the window' },
+        path: current.path,
+        dirty: true
+      })
+    }
+
+    const saved = await raced.call('save_graph', { path: '/tmp/race.json' })
+    expect(saved.isError).toBe(false)
+    expect(saved.payload.note).toContain('older')
+
+    const document = await raced.call('get_graph')
+    expect(document.payload.name).toBe('Edited in the window')
+    expect(document.payload.dirty).toBe(true)
+  })
+
   it('reports a missing file as a tool error', async () => {
     const result = await h.call('open_graph', { path: '/tmp/nope.json' })
     expect(result.isError).toBe(true)
@@ -140,6 +166,17 @@ describe('document tools', () => {
     await h.call('add_agent', { name: 'Router' })
     const valid = await h.call('validate_graph')
     expect(valid.payload.ok).toBe(true)
+  })
+
+  it('clears an optional agent field when the patch passes null', async () => {
+    await h.call('add_agent', { name: 'Router' })
+    const set = await h.call('update_agent', { agent: 'Router', temperature: 0.5, maxTurns: 4 })
+    expect(set.payload).toMatchObject({ temperature: 0.5, maxTurns: 4 })
+
+    const cleared = await h.call('update_agent', { agent: 'Router', temperature: null })
+    expect(cleared.isError).toBe(false)
+    expect(cleared.payload.temperature).toBeUndefined()
+    expect(cleared.payload.maxTurns).toBe(4)
   })
 
   it('serves the document as a resource', async () => {
