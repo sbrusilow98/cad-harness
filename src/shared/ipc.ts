@@ -14,7 +14,11 @@ export const IPC = {
   listMcpTools: 'mcp:tools',
   startRun: 'run:start',
   stopRun: 'run:stop',
-  runEvent: 'run:event'
+  runEvent: 'run:event',
+  syncDocument: 'document:sync',
+  documentChanged: 'document:changed',
+  controlStatus: 'control:status',
+  regenerateControlToken: 'control:regenerateToken'
 } as const
 
 export interface McpToolSummary {
@@ -28,6 +32,21 @@ export interface ModelListResult {
   models: string[]
   source: 'api' | 'fallback'
   error?: string
+}
+
+export interface DocumentPayload {
+  graph: Graph
+  path: string | null
+  dirty: boolean
+  revision: number
+}
+
+export interface ControlStatusPayload {
+  enabled: boolean
+  port: number
+  url: string | null
+  token: string
+  error: string | null
 }
 
 export interface OpenedGraph {
@@ -49,6 +68,10 @@ export interface Api {
   startRun(graph: Graph, input: string): Promise<string>
   stopRun(runId: string): Promise<void>
   onRunEvent(listener: (event: RunEvent) => void): () => void
+  syncDocument(document: { graph: Graph; path: string | null; dirty: boolean }): void
+  onDocumentChanged(listener: (document: DocumentPayload) => void): () => void
+  getControlStatus(): Promise<ControlStatusPayload>
+  regenerateControlToken(): Promise<ControlStatusPayload>
 }
 
 declare global {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, type Api } from '@shared/ipc'
+import { IPC, type Api, type DocumentPayload } from '@shared/ipc'
 import type { RunEvent } from '@shared/events'
 
 const api: Api = {
@@ -21,7 +21,19 @@ const api: Api = {
     return () => {
       ipcRenderer.removeListener(IPC.runEvent, handler)
     }
-  }
+  },
+  syncDocument: (document) => {
+    ipcRenderer.send(IPC.syncDocument, document)
+  },
+  onDocumentChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, document: DocumentPayload): void => listener(document)
+    ipcRenderer.on(IPC.documentChanged, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.documentChanged, handler)
+    }
+  },
+  getControlStatus: () => ipcRenderer.invoke(IPC.controlStatus),
+  regenerateControlToken: () => ipcRenderer.invoke(IPC.regenerateControlToken)
 }
 
 contextBridge.exposeInMainWorld('api', api)

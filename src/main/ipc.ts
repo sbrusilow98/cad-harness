@@ -1,22 +1,26 @@
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { readFile } from 'node:fs/promises'
 import { IPC, type McpToolListResult, type McpToolSummary, type OpenedGraph } from '@shared/ipc'
-import type { Graph, McpServerConfig, ProviderId, Settings, ToolGrant } from '@shared/types'
-import type { RunEvent } from '@shared/events'
+import type { Graph, McpServerConfig, ProviderId, Settings } from '@shared/types'
 import type { SettingsStore } from './settings'
 import type { SecretStore } from './secrets'
 import type { McpRegistry } from './mcp/registry'
 import { parseGraphFile, serializeGraph } from './graph-files'
-import { getProvider, listModelsWithFallback } from './providers'
-import { runGraph, type EngineDeps } from './runtime/engine'
+import { listModelsWithFallback } from './providers'
 import { errorMessage } from '@shared/errors'
 import type { McpToolInfo } from './runtime/graph-tools'
 import { writeFileAtomic } from './fs-utils'
+import type { DocumentService } from './document-service'
+import type { RunService } from './run-service'
+import type { ControlManager } from './control/manager'
 
 export interface MainContext {
   settings: SettingsStore
   secrets: SecretStore
   mcp: McpRegistry
+  document: DocumentService
+  runs: RunService
+  control: ControlManager
   getWindow: () => BrowserWindow | null
 }
 
@@ -53,32 +57,7 @@ function connectionKey(config: McpServerConfig): string {
   })
 }
 
-async function collectMcpTools(ctx: MainContext, grants: ToolGrant[], signal?: AbortSignal): Promise<{ tools: McpToolInfo[]; warnings: string[] }> {
-  const tools: McpToolInfo[] = []
-  const warnings: string[] = []
-  const configured = ctx.settings.get().mcpServers
-  for (const serverId of new Set(grants.map((g) => g.serverId))) {
-    const config = configured.find((s) => s.id === serverId)
-    if (!config) {
-      warnings.push(`A node references MCP server "${serverId}", which is no longer configured; its tools were skipped.`)
-      continue
-    }
-    try {
-      tools.push(...(await ctx.mcp.listTools(serverId, signal)))
-    } catch (err) {
-      warnings.push(`Could not connect to MCP server "${config.name}": ${errorMessage(err)}`)
-    }
-  }
-  return { tools, warnings }
-}
-
-function workspaceIdFor(ctx: MainContext, provider: ProviderId): string | undefined {
-  return provider === 'anthropic' ? ctx.settings.get().anthropicWorkspaceId : undefined
-}
-
 export function registerIpc(ctx: MainContext): void {
-  const runs = new Map<string, AbortController>()
-
   ipcMain.handle(IPC.openGraph, async (): Promise<OpenedGraph | null> => {
     const win = ctx.getWindow()
     const options = { properties: ['openFile' as const], filters: GRAPH_FILTERS }
@@ -113,6 +92,7 @@ export function registerIpc(ctx: MainContext): void {
       const now = after.mcpServers.find((s) => s.id === old.id)
       if (!now || connectionKey(now) !== connectionKey(old)) void ctx.mcp.invalidate(old.id)
     }
+    if (JSON.stringify(before.remoteControl) !== JSON.stringify(after.remoteControl)) void ctx.control.sync()
     return after
   })
 
@@ -130,7 +110,11 @@ export function registerIpc(ctx: MainContext): void {
   })
 
   ipcMain.handle(IPC.listModels, (_event, provider: ProviderId) =>
-    listModelsWithFallback(provider, ctx.secrets.get(provider), workspaceIdFor(ctx, provider))
+    listModelsWithFallback(
+      provider,
+      ctx.secrets.get(provider),
+      provider === 'anthropic' ? ctx.settings.get().anthropicWorkspaceId : undefined
+    )
   )
 
   ipcMain.handle(IPC.testMcp, async (_event, config: McpServerConfig): Promise<McpToolListResult> => {
@@ -151,30 +135,16 @@ export function registerIpc(ctx: MainContext): void {
     }
   })
 
-  ipcMain.handle(IPC.startRun, (event, graph: Graph, input: string): string => {
-    const runId = globalThis.crypto.randomUUID()
-    const controller = new AbortController()
-    runs.set(runId, controller)
-    const sender = event.sender
-    const emit = (e: RunEvent): void => {
-      if (!sender.isDestroyed()) sender.send(IPC.runEvent, e)
-    }
-    const deps: EngineDeps = {
-      getProvider,
-      getApiKey: async (id) => ctx.secrets.get(id),
-      getWorkspaceId: (id) => workspaceIdFor(ctx, id),
-      listMcpTools: (grants, signal) => collectMcpTools(ctx, grants, signal),
-      callMcpTool: (ref, args, signal) => ctx.mcp.callTool(ref, args, signal),
-      limits: ctx.settings.get().limits,
-      emit
-    }
-    void runGraph({ runId, graph, input, signal: controller.signal, deps })
-      .catch(() => undefined)
-      .finally(() => runs.delete(runId))
-    return runId
-  })
+  ipcMain.handle(IPC.startRun, (_event, graph: Graph, input: string): string => ctx.runs.start(graph, input))
 
   ipcMain.handle(IPC.stopRun, (_event, runId: string) => {
-    runs.get(runId)?.abort()
+    ctx.runs.stop(runId)
   })
+
+  ipcMain.on(IPC.syncDocument, (_event, document: { graph: Graph; path: string | null; dirty: boolean }) => {
+    ctx.document.syncFromRenderer(document)
+  })
+
+  ipcMain.handle(IPC.controlStatus, () => ctx.control.status())
+  ipcMain.handle(IPC.regenerateControlToken, () => ctx.control.regenerateToken())
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { BrowserWindow } from 'electron'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +8,7 @@ import type { Graph, McpServerConfig } from '@shared/types'
 import { emptyGraph, createAgentNode } from '@shared/graph-defaults'
 import type { RunEvent } from '@shared/events'
 import { registerIpc } from './ipc'
+import { createServices } from './services'
 import { SettingsStore } from './settings'
 import { SecretStore, type Cipher } from './secrets'
 
@@ -14,6 +16,7 @@ type Handler = (event: unknown, ...args: unknown[]) => unknown
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, Handler>(),
+  listeners: new Map<string, Handler>(),
   showSaveDialog: vi.fn(),
   showOpenDialog: vi.fn()
 }))
@@ -22,6 +25,9 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (channel: string, fn: Handler): void => {
       mocks.handlers.set(channel, fn)
+    },
+    on: (channel: string, fn: Handler): void => {
+      mocks.listeners.set(channel, fn)
     }
   },
   dialog: {
@@ -52,8 +58,11 @@ function setup(): {
   sender: Sender
   event: { sender: Sender }
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+  send: (channel: string, ...args: unknown[]) => void
+  services: ReturnType<typeof createServices>
 } {
   mocks.handlers.clear()
+  mocks.listeners.clear()
   mocks.showSaveDialog.mockReset().mockResolvedValue({ canceled: true })
   mocks.showOpenDialog.mockReset().mockResolvedValue({ canceled: true, filePaths: [] })
 
@@ -70,10 +79,23 @@ function setup(): {
   const sender: Sender = { isDestroyed: () => false, send: vi.fn() }
   const event = { sender }
 
+  const fakeWindow = {
+    isDestroyed: () => false,
+    webContents: { isDestroyed: () => false, send: sender.send }
+  } as unknown as BrowserWindow
+
+  const services = createServices({
+    settings,
+    secrets,
+    mcp: registry as unknown as Parameters<typeof createServices>[0]['mcp'],
+    getWindows: () => [fakeWindow]
+  })
+
   registerIpc({
     settings,
     secrets,
     mcp: registry as unknown as Parameters<typeof registerIpc>[0]['mcp'],
+    ...services,
     getWindow: () => null
   })
 
@@ -82,7 +104,14 @@ function setup(): {
     if (!handler) throw new Error(`no handler registered for ${channel}`)
     return handler(event, ...args)
   }
-  return { settings, secrets, registry, sender, event, invoke }
+
+  const send = (channel: string, ...args: unknown[]): void => {
+    const listener = mocks.listeners.get(channel)
+    if (!listener) throw new Error(`no listener registered for ${channel}`)
+    listener(event, ...args)
+  }
+
+  return { settings, secrets, registry, sender, event, invoke, send, services }
 }
 
 const stdio = (id: string, name: string, args: string[]): McpServerConfig => ({
@@ -194,5 +223,36 @@ describe('mcp handlers', () => {
       { serverId: 's1', serverName: 'One', name: 'read', description: 'Reads', inputSchema: {} }
     ])
     expect(await invoke(IPC.listMcpTools, 's1')).toEqual({ ok: true, tools: [{ name: 'read', description: 'Reads' }] })
+  })
+})
+
+describe('document mirror and remote control', () => {
+  it('mirrors the document the renderer reports', () => {
+    const { send, services } = setup()
+    const graph = emptyGraph('Synced')
+    send(IPC.syncDocument, { graph, path: '/tmp/a.json', dirty: true })
+    expect(services.document.get()).toMatchObject({ path: '/tmp/a.json', dirty: true })
+    expect(services.document.get().graph.name).toBe('Synced')
+  })
+
+  it('pushes a document mutated over MCP back to the window', () => {
+    const { sender, services } = setup()
+    services.document.replace(emptyGraph('From MCP'), null, true)
+    const pushed = sender.send.mock.calls.find((call) => call[0] === IPC.documentChanged)
+    expect(pushed).toBeDefined()
+    expect((pushed?.[1] as { graph: Graph }).graph.name).toBe('From MCP')
+  })
+
+  it('reports the control status and replaces the token on request', async () => {
+    const { invoke, services } = setup()
+    // The app syncs at startup; that first sync is what mints the token status() reads back.
+    await services.control.sync()
+    const before = (await invoke(IPC.controlStatus)) as { enabled: boolean; token: string; url: string | null }
+    expect(before).toMatchObject({ enabled: false, url: null })
+    expect(before.token).toHaveLength(64)
+
+    const after = (await invoke(IPC.regenerateControlToken)) as { token: string }
+    expect(after.token).toHaveLength(64)
+    expect(after.token).not.toBe(before.token)
   })
 })

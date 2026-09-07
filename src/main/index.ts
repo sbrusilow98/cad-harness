@@ -6,6 +6,7 @@ import { SecretStore } from './secrets'
 import { electronCipher } from './secrets-electron'
 import { McpRegistry } from './mcp/registry'
 import { registerIpc } from './ipc'
+import { createServices } from './services'
 
 let mainWindow: BrowserWindow | null = null
 let quitting = false
@@ -58,8 +59,10 @@ void app.whenReady().then(() => {
   const settings = new SettingsStore(join(userData, 'settings.json'))
   const secrets = new SecretStore(join(userData, 'secrets.bin'), electronCipher())
   const mcp = new McpRegistry(() => settings.get().mcpServers)
+  const services = createServices({ settings, secrets, mcp, getWindows: () => BrowserWindow.getAllWindows() })
 
-  registerIpc({ settings, secrets, mcp, getWindow: () => mainWindow })
+  registerIpc({ settings, secrets, mcp, ...services, getWindow: () => mainWindow })
+  void services.control.sync()
   createWindow(settings.get().theme)
 
   app.on('activate', () => {
@@ -69,7 +72,11 @@ void app.whenReady().then(() => {
     if (quitting) return
     event.preventDefault()
     quitting = true
-    void Promise.race([mcp.closeAll(), new Promise<void>((resolve) => setTimeout(resolve, 3000))])
+    services.runs.stopAll()
+    void Promise.race([
+      Promise.all([mcp.closeAll(), services.control.stop()]),
+      new Promise<void>((resolve) => setTimeout(resolve, 3000))
+    ])
       .catch(() => undefined)
       .finally(() => app.quit())
   })
