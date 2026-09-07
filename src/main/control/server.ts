@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import type { ControlDeps } from './deps'
 import { describeDocument, registerDocumentTools } from './tools-document'
 import { describeRun, registerRunTools } from './tools-runs'
+import { registerSettingsTools } from './tools-settings'
 
 export const CONTROL_SERVER_INFO = { name: 'agent-graph', version: '0.1.0' } as const
 
@@ -14,6 +15,7 @@ export function buildControlServer(deps: ControlDeps): McpServer {
 
   registerDocumentTools(server, deps)
   registerRunTools(server, deps)
+  registerSettingsTools(server, deps)
 
   server.registerResource(
     'document',
