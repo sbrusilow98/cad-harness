@@ -1125,6 +1125,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Create: `src/main/control/result.ts`
 - Create: `src/main/control/tools-document.ts`
 - Create: `src/main/control/server.ts`
+- Create: `src/main/control/test-harness.ts`
 - Create: `src/main/control/tools-document.test.ts`
 - Modify: `package.json` (move `zod` from `devDependencies` to `dependencies`)
 
@@ -1141,17 +1142,16 @@ Expected: `4.5.4 undefined`
 
 - [ ] **Step 2: Write the failing test**
 
-Create `src/main/control/tools-document.test.ts`:
+First create the shared harness, `src/main/control/test-harness.ts`. It is a plain module, not a
+`.test.ts` file, so importing it from several test files does not re-register anyone's tests:
 
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { buildControlServer } from './server'
 import type { ControlDeps } from './deps'
 import { DocumentService } from '../document-service'
 import { RunService } from '../run-service'
-import { emptyGraph } from '@shared/graph-defaults'
 import { DEFAULT_SETTINGS, type Graph, type Settings } from '@shared/types'
 
 export interface Harness {
@@ -1209,6 +1209,14 @@ export async function harness(overrides: Partial<ControlDeps> = {}): Promise<Har
 
   return { client, deps, files, call }
 }
+```
+
+Then create `src/main/control/tools-document.test.ts`:
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest'
+import { emptyGraph } from '@shared/graph-defaults'
+import { harness, type Harness } from './test-harness'
 
 describe('document tools', () => {
   let h: Harness
@@ -1713,7 +1721,7 @@ Create `src/main/control/tools-runs.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { harness } from './tools-document.test'
+import { harness } from './test-harness'
 import { RunService } from '../run-service'
 import type { RunEvent } from '@shared/events'
 
@@ -1991,7 +1999,7 @@ Create `src/main/control/tools-settings.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { harness } from './tools-document.test'
+import { harness } from './test-harness'
 import type { McpServerConfig } from '@shared/types'
 
 describe('settings tools', () => {
@@ -2219,6 +2227,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 8: Loopback listener and lifecycle manager
 
 **Files:**
+- Modify: `src/shared/types.ts`, `src/main/settings.ts`, `src/main/settings.test.ts`
 - Create: `src/main/control/http.ts`
 - Create: `src/main/control/manager.ts`
 - Create: `src/main/control/http.test.ts`
@@ -2226,9 +2235,55 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `buildControlServer` from `./server`; `ControlDeps` from `./deps`; `Settings` from `@shared/types`.
-- Produces: `CONTROL_PATH`, `ControlListener`, `startControlListener(options)` from `./http`; `ControlStatus`, `CONTROL_TOKEN_KEY`, `ControlManager` from `./manager`.
+- Produces: `RemoteControlSettings` and `DEFAULT_REMOTE_CONTROL` in `@shared/types`; `CONTROL_PATH`, `ControlListener`, `startControlListener(options)` from `./http`; `ControlStatus`, `CONTROL_TOKEN_KEY`, `ControlManager` from `./manager`.
 
-- [ ] **Step 1: Write the failing listener test**
+- [ ] **Step 1: Add the remote control settings shape**
+
+In `src/shared/types.ts`, add above `Settings`:
+
+```ts
+export interface RemoteControlSettings {
+  enabled: boolean
+  port: number
+}
+
+export const DEFAULT_REMOTE_CONTROL: RemoteControlSettings = { enabled: false, port: 4820 }
+```
+
+add `remoteControl: RemoteControlSettings` to `Settings` (after `limits`), and add `remoteControl: DEFAULT_REMOTE_CONTROL` to `DEFAULT_SETTINGS`.
+
+In `src/main/settings.ts`, inside `normalizeSettings`, add before the `return`:
+
+```ts
+  const remote = (r.remoteControl && typeof r.remoteControl === 'object' ? r.remoteControl : {}) as Partial<RemoteControlSettings>
+  const port =
+    typeof remote.port === 'number' && Number.isInteger(remote.port) && remote.port >= 1 && remote.port <= 65535
+      ? remote.port
+      : DEFAULT_REMOTE_CONTROL.port
+```
+
+and add to the returned object:
+
+```ts
+    remoteControl: { enabled: remote.enabled === true, port },
+```
+
+Import `DEFAULT_REMOTE_CONTROL` and the `RemoteControlSettings` type from `@shared/types`.
+
+Append to `src/main/settings.test.ts`:
+
+```ts
+describe('normalizeSettings remoteControl', () => {
+  it('defaults to disabled on port 4820 and rejects a bad port', () => {
+    expect(normalizeSettings({}).remoteControl).toEqual({ enabled: false, port: 4820 })
+    expect(normalizeSettings({ remoteControl: { enabled: true, port: 5000 } }).remoteControl).toEqual({ enabled: true, port: 5000 })
+    expect(normalizeSettings({ remoteControl: { enabled: 'yes', port: 0 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
+    expect(normalizeSettings({ remoteControl: { port: 70000 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
+  })
+})
+```
+
+- [ ] **Step 2: Write the failing listener test**
 
 Create `src/main/control/http.test.ts`:
 
@@ -2315,12 +2370,12 @@ describe('control listener', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run src/main/control/http.test.ts`
 Expected: FAIL, cannot find module `./http`.
 
-- [ ] **Step 3: Implement the listener**
+- [ ] **Step 4: Implement the listener**
 
 Create `src/main/control/http.ts`:
 
@@ -2433,7 +2488,7 @@ export async function startControlListener(options: ControlListenerOptions): Pro
 }
 ```
 
-- [ ] **Step 4: Write the failing manager test**
+- [ ] **Step 5: Write the failing manager test**
 
 Create `src/main/control/manager.test.ts`:
 
@@ -2563,12 +2618,12 @@ describe('ControlManager', () => {
 })
 ```
 
-- [ ] **Step 5: Run test to verify it fails**
+- [ ] **Step 6: Run test to verify it fails**
 
 Run: `npx vitest run src/main/control/manager.test.ts`
 Expected: FAIL, cannot find module `./manager`.
 
-- [ ] **Step 6: Implement the manager**
+- [ ] **Step 7: Implement the manager**
 
 Create `src/main/control/manager.ts`:
 
@@ -2665,15 +2720,15 @@ export class ControlManager {
 }
 ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [ ] **Step 8: Run tests and typecheck**
 
 Run: `npx vitest run src/main/control && npm run typecheck`
 Expected: all control tests pass; typecheck clean. The listener tests bind real loopback ports; if the sandbox forbids that, report it rather than weakening the tests.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/main/control
+git add src/shared/types.ts src/main/settings.ts src/main/settings.test.ts src/main/control
 git commit -m "Serve the control server over loopback with a bearer token
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
@@ -2684,61 +2739,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 9: Wire the services into the app
 
 **Files:**
-- Modify: `src/shared/types.ts`, `src/main/settings.ts`, `src/main/settings.test.ts`
 - Modify: `src/shared/ipc.ts`, `src/preload/index.ts`
 - Create: `src/main/services.ts`
 - Modify: `src/main/ipc.ts`, `src/main/index.ts`, `src/main/ipc.test.ts`
 
 **Interfaces:**
-- Produces: `RemoteControlSettings`, `DEFAULT_REMOTE_CONTROL` in `@shared/types`; `IPC.syncDocument`, `IPC.documentChanged`, `IPC.controlStatus`, `IPC.regenerateControlToken`, `DocumentPayload`, and the four new `Api` methods in `@shared/ipc`; `createServices` in `src/main/services.ts`; `MainContext` in `src/main/ipc.ts` gains `document`, `runs`, `control`.
+- Produces: `IPC.syncDocument`, `IPC.documentChanged`, `IPC.controlStatus`, `IPC.regenerateControlToken`, `DocumentPayload`, and the four new `Api` methods in `@shared/ipc`; `createServices` in `src/main/services.ts`; `MainContext` in `src/main/ipc.ts` gains `document`, `runs`, `control`.
 
-- [ ] **Step 1: Add the settings shape**
-
-In `src/shared/types.ts`, add above `Settings`:
-
-```ts
-export interface RemoteControlSettings {
-  enabled: boolean
-  port: number
-}
-
-export const DEFAULT_REMOTE_CONTROL: RemoteControlSettings = { enabled: false, port: 4820 }
-```
-
-add `remoteControl: RemoteControlSettings` to `Settings` (after `limits`), and add `remoteControl: DEFAULT_REMOTE_CONTROL` to `DEFAULT_SETTINGS`.
-
-In `src/main/settings.ts`, inside `normalizeSettings`, add before the `return`:
-
-```ts
-  const remote = (r.remoteControl && typeof r.remoteControl === 'object' ? r.remoteControl : {}) as Partial<RemoteControlSettings>
-  const port =
-    typeof remote.port === 'number' && Number.isInteger(remote.port) && remote.port >= 1 && remote.port <= 65535
-      ? remote.port
-      : DEFAULT_REMOTE_CONTROL.port
-```
-
-and add to the returned object:
-
-```ts
-    remoteControl: { enabled: remote.enabled === true, port },
-```
-
-Import `DEFAULT_REMOTE_CONTROL` and the `RemoteControlSettings` type from `@shared/types`.
-
-Append to `src/main/settings.test.ts`:
-
-```ts
-describe('normalizeSettings remoteControl', () => {
-  it('defaults to disabled on port 4820 and rejects a bad port', () => {
-    expect(normalizeSettings({}).remoteControl).toEqual({ enabled: false, port: 4820 })
-    expect(normalizeSettings({ remoteControl: { enabled: true, port: 5000 } }).remoteControl).toEqual({ enabled: true, port: 5000 })
-    expect(normalizeSettings({ remoteControl: { enabled: 'yes', port: 0 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
-    expect(normalizeSettings({ remoteControl: { port: 70000 } }).remoteControl).toEqual({ enabled: false, port: 4820 })
-  })
-})
-```
-
-- [ ] **Step 2: Extend the IPC contract**
+- [ ] **Step 1: Extend the IPC contract**
 
 In `src/shared/ipc.ts`, add to the `IPC` object:
 
@@ -2796,7 +2804,7 @@ In `src/preload/index.ts`, add the matching implementations to the `api` object:
 
 importing `type DocumentPayload` alongside the existing `@shared/ipc` imports.
 
-- [ ] **Step 3: Create the service factory**
+- [ ] **Step 2: Create the service factory**
 
 Create `src/main/services.ts`. `collectMcpTools` and `workspaceIdFor` move here **out of** `src/main/ipc.ts` (delete them there):
 
@@ -2913,7 +2921,7 @@ export function createServices(input: ServiceInput): Services {
 }
 ```
 
-- [ ] **Step 4: Rewire the IPC layer**
+- [ ] **Step 3: Rewire the IPC layer**
 
 In `src/main/ipc.ts`:
 
@@ -2975,7 +2983,7 @@ with imports for `DocumentService`, `RunService`, `ControlManager`, and `Documen
     if (JSON.stringify(before.remoteControl) !== JSON.stringify(after.remoteControl)) void ctx.control.sync()
 ```
 
-- [ ] **Step 5: Rewire the main entry**
+- [ ] **Step 4: Rewire the main entry**
 
 In `src/main/index.ts`, replace the body of the `app.whenReady()` callback with:
 
@@ -3009,7 +3017,7 @@ In `src/main/index.ts`, replace the body of the `app.whenReady()` callback with:
 
 adding `import { createServices } from './services'`.
 
-- [ ] **Step 6: Extend the IPC tests**
+- [ ] **Step 5: Extend the IPC tests**
 
 `src/main/ipc.test.ts` builds its context in `setup()`. Three edits, then two new tests.
 
@@ -3118,12 +3126,12 @@ describe('document mirror and remote control', () => {
 })
 ```
 
-- [ ] **Step 7: Verify**
+- [ ] **Step 6: Verify**
 
 Run: `npm test && npm run typecheck && npm run build`
 Expected: all pass. Then launch: `npx electron-vite dev > /tmp/agent-graph-dev.log 2>&1 &`, wait 20 s, check the log for errors, and kill it.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add -A src
