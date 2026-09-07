@@ -666,3 +666,23 @@ input[type='checkbox'] {
 .number-field input {
   width: 100%;
 }
+
+/* Remote control */
+.snippet {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+  margin-bottom: 6px;
+}
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}

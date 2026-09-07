@@ -5,12 +5,14 @@ import { newId } from '@shared/graph-defaults'
 import { useUiStore } from '@/store/ui'
 import { describeError } from '@/lib/errors'
 import { formatPairs, parseLines, parsePairs } from '@/lib/kv'
+import { RemoteControlTab } from './RemoteControlTab'
 
-type Tab = 'keys' | 'mcp' | 'limits'
+type Tab = 'keys' | 'mcp' | 'limits' | 'remote'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'keys', label: 'API keys' },
   { id: 'mcp', label: 'MCP servers' },
-  { id: 'limits', label: 'Limits' }
+  { id: 'limits', label: 'Limits' },
+  { id: 'remote', label: 'Remote control' }
 ]
 
 function KeysTab() {
@@ -388,7 +390,9 @@ export function SettingsDialog() {
             </button>
           ))}
         </div>
-        <div className="dialog-body">{tab === 'keys' ? <KeysTab /> : tab === 'mcp' ? <McpTab /> : <LimitsTab />}</div>
+        <div className="dialog-body">
+          {tab === 'keys' ? <KeysTab /> : tab === 'mcp' ? <McpTab /> : tab === 'limits' ? <LimitsTab /> : <RemoteControlTab />}
+        </div>
       </div>
     </div>
   )
