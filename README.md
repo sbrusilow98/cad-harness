@@ -34,6 +34,33 @@ Runtime rules:
 - Each delegate edge becomes a `delegate_to_<name>` tool. The child runs (following its own handoffs) and its final output returns as the tool result.
 - Runs stop at the per-agent turn limit, the delegation depth limit, or the total step limit (Settings → Limits), so cycles always terminate.
 
+## Controlling it from another agent
+
+Agent Graph can host an MCP server so Claude Code or another harness can build a graph on the canvas,
+run it, and read the result. Open Settings (⌘,), choose **Remote control**, and switch it on. The tab
+shows the URL, the token, and a ready-made command:
+
+```bash
+claude mcp add --transport http agent-graph http://127.0.0.1:4820/mcp --header "Authorization: Bearer <token>"
+```
+
+The server listens on this Mac only and is off until you enable it. Anything running on this Mac that
+has the token can drive the app, so treat the token like a password; **Regenerate** replaces it.
+
+Tools it offers:
+
+| Group | Tools |
+|---|---|
+| Graph | `get_graph`, `new_graph`, `open_graph`, `save_graph`, `set_graph_name`, `validate_graph` |
+| Agents | `add_agent`, `update_agent`, `remove_agent`, `set_entry` |
+| Edges | `connect`, `update_edge`, `disconnect` |
+| Runs | `run_graph`, `stop_run`, `get_run`, `list_runs` |
+| Setup | `list_mcp_servers`, `add_mcp_server`, `remove_mcp_server`, `test_mcp_server`, `list_models` |
+
+Agents and edges can be named rather than given by id (`connect` from `Router` to `Writer`, or
+`disconnect` the edge `Router->Writer`). API keys are never readable or writable through these tools,
+and `list_mcp_servers` hides environment and header values.
+
 ## Shortcuts
 
 | Keys | Action |
