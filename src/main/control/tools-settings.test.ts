@@ -78,6 +78,39 @@ describe('settings tools', () => {
     expect((await h.call('remove_mcp_server', { server: 'Ghost' })).isError).toBe(true)
   })
 
+  it('refuses a second server with a name already in use', async () => {
+    const h = await harness({
+      mcp: {
+        invalidate: async () => undefined,
+        test: async (config) => [
+          { serverId: config.id, serverName: config.name, name: 'ping', description: '', inputSchema: { type: 'object' } }
+        ]
+      }
+    })
+    expect((await h.call('add_mcp_server', { name: 'Local', transport: 'stdio', command: 'npx' })).isError).toBe(false)
+    const again = await h.call('add_mcp_server', { name: ' local ', transport: 'stdio', command: 'npx' })
+    expect(again.isError).toBe(true)
+    expect(again.text).toContain('already exists')
+    expect(h.deps.settings.get().mcpServers).toHaveLength(1)
+  })
+
+  it('reports an ambiguous server name with the ids to use instead', async () => {
+    const h = await harness()
+    h.deps.settings.update({
+      mcpServers: [
+        { id: 's1', name: 'Twin', transport: 'stdio', command: 'a', args: [] },
+        { id: 's2', name: 'Twin', transport: 'stdio', command: 'b', args: [] }
+      ]
+    })
+    const removed = await h.call('remove_mcp_server', { server: 'Twin' })
+    expect(removed.isError).toBe(true)
+    expect(removed.text).toContain('s1, s2')
+    expect(h.deps.settings.get().mcpServers).toHaveLength(2)
+
+    const byId = await h.call('remove_mcp_server', { server: 's2' })
+    expect(byId.payload).toEqual({ removedServerId: 's2' })
+  })
+
   it('lists models for a provider', async () => {
     const h = await harness()
     const result = await h.call('list_models', { provider: 'anthropic' })

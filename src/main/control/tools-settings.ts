@@ -15,10 +15,23 @@ export function redactServer(config: McpServerConfig): unknown {
   return { ...base, url: config.url, headerNames: Object.keys(config.headers ?? {}) }
 }
 
-function findServer(deps: ControlDeps, reference: string): McpServerConfig | undefined {
-  const trimmed = reference.trim().toLowerCase()
+type ServerLookup = { ok: true; value: McpServerConfig } | { ok: false; error: string }
+
+/** Resolves an id or a name, reporting ambiguity rather than silently picking one. */
+function findServer(deps: ControlDeps, reference: string): ServerLookup {
+  const trimmed = reference.trim()
   const servers = deps.settings.get().mcpServers
-  return servers.find((s) => s.id === reference.trim()) ?? servers.find((s) => s.name.trim().toLowerCase() === trimmed)
+  const byId = servers.find((s) => s.id === trimmed)
+  if (byId) return { ok: true, value: byId }
+  const matches = servers.filter((s) => s.name.trim().toLowerCase() === trimmed.toLowerCase())
+  if (matches.length === 1) return { ok: true, value: matches[0] }
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      error: `Two or more MCP servers are named "${trimmed}". Use an id instead: ${matches.map((m) => m.id).join(', ')}.`
+    }
+  }
+  return { ok: false, error: `No MCP server matches "${trimmed}".` }
 }
 
 export function registerSettingsTools(server: McpServer, deps: ControlDeps): void {
@@ -44,14 +57,20 @@ export function registerSettingsTools(server: McpServer, deps: ControlDeps): voi
       }
     },
     async ({ name, transport, command, args, env, url, headers }) => {
+      const trimmedName = name.trim() || 'MCP server'
+      const clash = deps.settings
+        .get()
+        .mcpServers.some((s) => s.name.trim().toLowerCase() === trimmedName.toLowerCase())
+      if (clash) return fail(`An MCP server named "${trimmedName}" already exists. Remove it first, or pick another name.`)
+
       let config: McpServerConfig
       if (transport === 'stdio') {
         if (!command?.trim()) return fail('A stdio server needs a command.')
-        config = { id: newId(), name: name.trim() || 'MCP server', transport: 'stdio', command: command.trim(), args: args ?? [] }
+        config = { id: newId(), name: trimmedName, transport: 'stdio', command: command.trim(), args: args ?? [] }
         if (env && Object.keys(env).length > 0) config.env = env
       } else {
         if (!url?.trim()) return fail('An http server needs a url.')
-        config = { id: newId(), name: name.trim() || 'MCP server', transport: 'http', url: url.trim() }
+        config = { id: newId(), name: trimmedName, transport: 'http', url: url.trim() }
         if (headers && Object.keys(headers).length > 0) config.headers = headers
       }
 
@@ -69,8 +88,9 @@ export function registerSettingsTools(server: McpServer, deps: ControlDeps): voi
     'remove_mcp_server',
     { description: 'Remove a configured MCP server. Give it by id or name.', inputSchema: { server: z.string() } },
     async ({ server: reference }) => {
-      const config = findServer(deps, reference)
-      if (!config) return fail(`No MCP server matches "${reference}".`)
+      const found = findServer(deps, reference)
+      if (!found.ok) return fail(found.error)
+      const config = found.value
       deps.settings.update({ mcpServers: deps.settings.get().mcpServers.filter((s) => s.id !== config.id) })
       await deps.mcp.invalidate(config.id)
       return ok({ removedServerId: config.id })
@@ -81,8 +101,9 @@ export function registerSettingsTools(server: McpServer, deps: ControlDeps): voi
     'test_mcp_server',
     { description: 'Connect to a configured MCP server and list the tools it offers.', inputSchema: { server: z.string() } },
     async ({ server: reference }) => {
-      const config = findServer(deps, reference)
-      if (!config) return fail(`No MCP server matches "${reference}".`)
+      const found = findServer(deps, reference)
+      if (!found.ok) return fail(found.error)
+      const config = found.value
       try {
         const tools = await deps.mcp.test(config)
         return ok({ id: config.id, name: config.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) })
