@@ -19,6 +19,7 @@ interface GraphState {
   removeEdges(ids: string[]): void
   setEntry(id: string): void
   markSaved(path: string): void
+  applyRemote(graph: Graph, path: string | null, dirty: boolean): void
 }
 
 export const useGraphStore = create<GraphState>((set, get) => {
@@ -110,6 +111,10 @@ export const useGraphStore = create<GraphState>((set, get) => {
 
     markSaved(path) {
       set({ path, dirty: false })
+    },
+
+    applyRemote(graph, path, dirty) {
+      set({ graph, path, dirty })
     }
   }
 })

@@ -7,12 +7,14 @@ import { Canvas } from '@/components/Canvas'
 import { Inspector } from '@/components/Inspector'
 import { RunConsole } from '@/components/RunConsole'
 import { SettingsDialog } from '@/components/SettingsDialog'
+import { useDocumentSync } from '@/lib/document-sync'
 
 export default function App() {
   const loadSettings = useUiStore((s) => s.loadSettings)
   useEffect(() => {
     void loadSettings()
   }, [loadSettings])
+  useDocumentSync()
 
   return (
     <div className="app">

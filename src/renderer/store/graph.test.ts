@@ -85,3 +85,15 @@ describe('graph store', () => {
     expect(s().dirty).toBe(false)
   })
 })
+
+describe('remote documents', () => {
+  it('adopts a document pushed from the main process, keeping its dirty flag', () => {
+    const g = emptyGraph('Remote')
+    s().applyRemote(g, '/tmp/remote.json', true)
+    expect(s().graph.name).toBe('Remote')
+    expect(s().path).toBe('/tmp/remote.json')
+    expect(s().dirty).toBe(true)
+    s().applyRemote(emptyGraph('Saved'), '/tmp/remote.json', false)
+    expect(s().dirty).toBe(false)
+  })
+})
