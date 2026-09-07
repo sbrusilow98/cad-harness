@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRunEvent, initialRunState, type RunState } from './run'
+import { applyRunEvent, initialRunState, type RunState } from './run-transcript'
 import type { RunEvent } from '@shared/events'
 
 function play(events: RunEvent[]): RunState {
