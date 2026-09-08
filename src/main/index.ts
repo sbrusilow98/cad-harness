@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, Menu } from 'electron'
 import { join } from 'node:path'
 import type { Theme } from '@shared/types'
 import { SettingsStore } from './settings'
@@ -7,6 +7,7 @@ import { electronCipher } from './secrets-electron'
 import { McpRegistry } from './mcp/registry'
 import { registerIpc } from './ipc'
 import { createServices } from './services'
+import { frameOptions } from './window-chrome'
 
 let mainWindow: BrowserWindow | null = null
 let quitting = false
@@ -17,8 +18,7 @@ function createWindow(theme: Theme): void {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 12 },
+    ...frameOptions(process.platform, theme),
     backgroundColor: theme === 'dark' ? '#0e0e0e' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -28,6 +28,12 @@ function createWindow(theme: Theme): void {
     }
   })
   mainWindow = win
+  // The menu is gone on Windows and Linux (see below), so bind the devtools keys the menu used to own.
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown' || process.platform === 'darwin') return
+    const key = input.key.toLowerCase()
+    if (key === 'f12' || (input.control && input.shift && key === 'i')) win.webContents.toggleDevTools()
+  })
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
@@ -55,6 +61,11 @@ function createWindow(theme: Theme): void {
 }
 
 void app.whenReady().then(() => {
+  // macOS needs the menu: without it ⌘C/⌘V and ⌘Q do nothing. Windows and Linux handle editing keys
+  // in the renderer on their own, and a menu bar would be drawn *inside* the frameless window, above
+  // the app's own top bar.
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
+
   const userData = app.getPath('userData')
   const settings = new SettingsStore(join(userData, 'settings.json'))
   const secrets = new SecretStore(join(userData, 'secrets.bin'), electronCipher())

@@ -11,13 +11,52 @@ export type TransportFactory = (config: McpServerConfig) => Transport
 const TOOL_CALL_TIMEOUT_MS = 10 * 60 * 1000
 const CONNECT_TIMEOUT_MS = 15000
 
-export function buildStdioEnv(configEnv: Record<string, string> | undefined, base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+/**
+ * The environment for a stdio server, with the directories a GUI app would otherwise miss.
+ *
+ * A double-clicked app inherits a bare login environment, not the shell's, so the tools people
+ * configure (`npx`, `uvx`) are usually not on PATH. Everything here is platform-shaped: the
+ * separator, the directories worth adding, and the name of the home variable all differ.
+ */
+export function buildStdioEnv(
+  configEnv: Record<string, string> | undefined,
+  base: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): Record<string, string> {
+  const windows = platform === 'win32'
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(base)) if (typeof value === 'string') env[key] = value
-  const extraPath = ['/usr/local/bin', '/opt/homebrew/bin']
-  if (typeof base.HOME === 'string' && base.HOME.length > 0) extraPath.push(`${base.HOME}/.local/bin`, `${base.HOME}/.cargo/bin`)
-  env['PATH'] = [env['PATH'] ?? '', ...extraPath].filter(Boolean).join(':')
-  Object.assign(env, configEnv ?? {})
+
+  // Windows environment names are case-insensitive, so the key we want may be spelled any way at all
+  // ("Path" is the usual one). Find the real key rather than assuming a casing.
+  const keyOf = (name: string): string =>
+    (windows ? Object.keys(env).find((key) => key.toUpperCase() === name.toUpperCase()) : undefined) ?? name
+  const valueOf = (name: string): string | undefined => env[keyOf(name)]
+
+  // Extend whichever PATH key is already there, or the child would get both it and a second "PATH".
+  const pathKey = keyOf('PATH')
+  const home = windows ? valueOf('USERPROFILE') : valueOf('HOME')
+  const extraPath: string[] = []
+  if (windows) {
+    const appData = valueOf('APPDATA')
+    const localAppData = valueOf('LOCALAPPDATA')
+    const programFiles = valueOf('ProgramFiles')
+    if (appData) extraPath.push(`${appData}\\npm`) // where `npm i -g` puts npx.cmd and friends
+    if (localAppData) extraPath.push(`${localAppData}\\Microsoft\\WindowsApps`)
+    if (programFiles) extraPath.push(`${programFiles}\\nodejs`)
+    if (home) extraPath.push(`${home}\\.local\\bin`, `${home}\\.cargo\\bin`)
+  } else {
+    extraPath.push('/usr/local/bin', '/opt/homebrew/bin')
+    if (home) extraPath.push(`${home}/.local/bin`, `${home}/.cargo/bin`)
+  }
+  env[pathKey] = [env[pathKey] ?? '', ...extraPath].filter(Boolean).join(windows ? ';' : ':')
+
+  for (const [key, value] of Object.entries(configEnv ?? {})) {
+    // A config "Path" has to replace an inherited "PATH", not sit next to it.
+    const existing = keyOf(key)
+    if (existing !== key) delete env[existing]
+    env[key] = value
+  }
   return env
 }
 

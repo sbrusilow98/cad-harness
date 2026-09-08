@@ -36,6 +36,18 @@ function authorized(header: string | undefined, token: string): boolean {
   return timingSafeEqual(given, expected)
 }
 
+/** Turns a bind failure into something the Remote control tab can act on: which port, and what to do. */
+function describeListenError(err: Error, port: number): Error {
+  const code = (err as NodeJS.ErrnoException).code
+  if (code === 'EADDRINUSE') return new Error(`Port ${port} is already in use by another program (EADDRINUSE). Pick a different port.`)
+  if (code === 'EACCES') {
+    return new Error(
+      `Port ${port} is not available to this app (EACCES). On Windows it may fall inside a range Hyper-V or WSL has reserved. Pick a different port.`
+    )
+  }
+  return err
+}
+
 export async function startControlListener(options: ControlListenerOptions): Promise<ControlListener> {
   const sockets = new Set<Socket>()
   let boundPort = options.port
@@ -87,7 +99,7 @@ export async function startControlListener(options: ControlListenerOptions): Pro
   })
 
   await new Promise<void>((resolve, reject) => {
-    const onError = (err: Error): void => reject(err)
+    const onError = (err: Error): void => reject(describeListenError(err, options.port))
     httpServer.once('error', onError)
     httpServer.listen(options.port, HOST, () => {
       httpServer.removeListener('error', onError)

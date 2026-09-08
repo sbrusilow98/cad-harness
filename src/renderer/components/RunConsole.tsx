@@ -4,6 +4,7 @@ import { useUiStore } from '@/store/ui'
 import { useRunStore, type ExecutionView } from '@/store/run'
 import { describeError } from '@/lib/errors'
 import { RUN_EVENT } from '@/lib/file-actions'
+import { shortcut } from '@/lib/platform'
 
 const STATUS_LABEL = { idle: 'Ready', running: 'Running', finished: 'Finished', error: 'Failed', cancelled: 'Stopped' } as const
 const GLYPH = { running: '●', done: '✓', error: '!' } as const
@@ -161,7 +162,7 @@ export function RunConsole() {
             Stop
           </button>
         )}
-        <button type="button" className="btn btn-ghost btn-icon btn-small" onClick={() => setOpen(false)} title="Hide console (⌘J)">
+        <button type="button" className="btn btn-ghost btn-icon btn-small" onClick={() => setOpen(false)} title={`Hide console (${shortcut('J')})`}>
           ×
         </button>
       </div>
@@ -172,7 +173,7 @@ export function RunConsole() {
           </div>
         ))}
         {run.executions.length === 0 && run.status === 'idle' && !startError && (
-          <div className="faint">Type a message below and press ⌘↩ to run the graph from its entry node.</div>
+          <div className="faint">Type a message below and press {shortcut('Enter')} to run the graph from its entry node.</div>
         )}
         {run.executions.map((exec) => (
           <ExecutionBlock key={exec.executionId} exec={exec} nodeName={nodeName(exec.nodeId)} edgeTarget={edgeTarget} />

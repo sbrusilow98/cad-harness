@@ -1,8 +1,9 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, type Api, type DocumentPayload } from '@shared/ipc'
+import { IPC, type Api, type DocumentPayload, type PlatformId } from '@shared/ipc'
 import type { RunEvent } from '@shared/events'
 
 const api: Api = {
+  platform: process.platform as PlatformId,
   openGraph: () => ipcRenderer.invoke(IPC.openGraph),
   saveGraph: (graph, path) => ipcRenderer.invoke(IPC.saveGraph, graph, path),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),

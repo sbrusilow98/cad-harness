@@ -100,8 +100,8 @@ export function RemoteControlTab() {
   return (
     <>
       <div className="small muted" style={{ marginBottom: 14 }}>
-        Lets another agent read and edit the graph in this window, run it, and read the result. It listens on this Mac
-        only. Anything running on this Mac that has the token can drive the app.
+        Lets another agent read and edit the graph in this window, run it, and read the result. It listens on this
+        computer only. Anything running on this computer that has the token can drive the app.
       </div>
 
       <div className="status-line">

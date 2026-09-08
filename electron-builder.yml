@@ -13,3 +13,12 @@ mac:
   target:
     - dmg
     - dir
+win:
+  target:
+    - nsis
+    - dir
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

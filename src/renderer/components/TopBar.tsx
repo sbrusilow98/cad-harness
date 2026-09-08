@@ -3,6 +3,7 @@ import { useGraphStore } from '@/store/graph'
 import { useUiStore } from '@/store/ui'
 import { useRunStore } from '@/store/run'
 import { newGraph, openGraph, saveGraph, RUN_EVENT } from '@/lib/file-actions'
+import { shortcut } from '@/lib/platform'
 
 export function TopBar() {
   const name = useGraphStore((s) => s.graph.name)
@@ -81,16 +82,21 @@ export function TopBar() {
       />
       {dirty && <span className="dirty-dot" title="Unsaved changes" />}
       <span className="spacer" />
-      <button type="button" className="btn btn-ghost" onClick={newGraph} title="New graph (⌘N)">
+      <button type="button" className="btn btn-ghost" onClick={newGraph} title={`New graph (${shortcut('N')})`}>
         New
       </button>
-      <button type="button" className="btn btn-ghost" onClick={() => void openGraph()} title="Open (⌘O)">
+      <button type="button" className="btn btn-ghost" onClick={() => void openGraph()} title={`Open (${shortcut('O')})`}>
         Open
       </button>
-      <button type="button" className="btn btn-ghost" onClick={() => void saveGraph()} title="Save (⌘S, ⇧⌘S to save as)">
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={() => void saveGraph()}
+        title={`Save (${shortcut('S')}, ${shortcut('S', { shift: true })} to save as)`}
+      >
         Save
       </button>
-      <button type="button" className="btn btn-primary" onClick={triggerRun} title="Run (⌘J toggles the console)">
+      <button type="button" className="btn btn-primary" onClick={triggerRun} title={`Run (${shortcut('J')} toggles the console)`}>
         {runStatus === 'running' ? 'Running…' : 'Run'}
       </button>
       <button
@@ -101,7 +107,7 @@ export function TopBar() {
       >
         {theme === 'dark' ? '☼' : '☾'}
       </button>
-      <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSettingsOpen(true)} title="Settings (⌘,)">
+      <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSettingsOpen(true)} title={`Settings (${shortcut(',')})`}>
         ⚙
       </button>
     </header>

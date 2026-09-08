@@ -13,6 +13,7 @@ import { writeFileAtomic } from './fs-utils'
 import type { DocumentService } from './document-service'
 import type { RunService } from './run-service'
 import type { ControlManager } from './control/manager'
+import { applyTitleBarOverlay } from './window-chrome'
 
 export interface MainContext {
   settings: SettingsStore
@@ -93,6 +94,10 @@ export function registerIpc(ctx: MainContext): void {
       if (!now || connectionKey(now) !== connectionKey(old)) void ctx.mcp.invalidate(old.id)
     }
     if (JSON.stringify(before.remoteControl) !== JSON.stringify(after.remoteControl)) void ctx.control.sync()
+    if (before.theme !== after.theme) {
+      const win = ctx.getWindow()
+      if (win) applyTitleBarOverlay(win, after.theme)
+    }
     return after
   })
 

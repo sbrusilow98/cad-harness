@@ -1,6 +1,6 @@
 # Agent Graph
 
-A macOS desktop app for building and running graph-style agentic harnesses. Lay out agent nodes on a canvas, give each one a model, instructions, and MCP tools, connect them with handoff or delegate edges, and run the graph with a live streaming console.
+A macOS and Windows desktop app for building and running graph-style agentic harnesses. Lay out agent nodes on a canvas, give each one a model, instructions, and MCP tools, connect them with handoff or delegate edges, and run the graph with a live streaming console.
 
 ## Features
 
@@ -9,16 +9,20 @@ A macOS desktop app for building and running graph-style agentic harnesses. Lay 
 - MCP servers over stdio (local commands) or streamable HTTP, configured once and shared by every graph.
 - Live run console with streamed text, collapsible tool calls, and handoff markers; the active node pulses on the canvas.
 - Light and dark themes in pure black, white, and gray.
-- Graphs are plain JSON files. API keys live encrypted in the system keychain.
+- Graphs are plain JSON files. API keys live encrypted by the OS (Keychain on macOS, DPAPI on Windows).
 
 ## Setup
+
+Needs [Node.js](https://nodejs.org) 20.19+ or 22.12+ (what Vite 7 requires).
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open Settings (⌘,) to add API keys and MCP servers.
+Open Settings (⌘, / Ctrl+,) to add API keys and MCP servers.
+
+Shortcuts use ⌘ on macOS and Ctrl on Windows; the rest of this README writes the macOS key.
 
 ## Using it
 
@@ -44,8 +48,9 @@ shows the URL, the token, and a ready-made command:
 claude mcp add --transport http agent-graph http://127.0.0.1:4820/mcp --header "Authorization: Bearer <token>"
 ```
 
-The server listens on this Mac only and is off until you enable it. Anything running on this Mac that
-has the token can drive the app, so treat the token like a password; **Regenerate** replaces it.
+The server listens on this computer only and is off until you enable it. Anything running on this
+computer that has the token can drive the app, so treat the token like a password; **Regenerate**
+replaces it.
 
 Tools it offers:
 
@@ -63,13 +68,14 @@ and `list_mcp_servers` hides environment and header values.
 
 ## Shortcuts
 
-| Keys | Action |
-|---|---|
-| ⌘N / ⌘O / ⌘S / ⇧⌘S | New / Open / Save / Save As |
-| ⌘J | Toggle the run console |
-| ⌘↩ | Run (in the console input) |
-| ⌘, | Settings |
-| Backspace | Delete the selected node or edge |
+| macOS | Windows | Action |
+|---|---|---|
+| ⌘N / ⌘O / ⌘S / ⇧⌘S | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | New / Open / Save / Save As |
+| ⌘J | Ctrl+J | Toggle the run console |
+| ⌘↩ | Ctrl+Enter | Run (in the console input) |
+| ⌘, | Ctrl+, | Settings |
+| Backspace | Backspace | Delete the selected node or edge |
+| — | F12 | Toggle developer tools |
 
 ## Development
 
@@ -77,7 +83,11 @@ and `list_mcp_servers` hides environment and header values.
 npm test          # unit tests (Vitest)
 npm run typecheck # tsc for main, preload, shared, renderer
 npm run build     # production bundles in out/
-npm run package   # unsigned macOS app and DMG in dist/
+npm run package   # unsigned app for the current OS in dist/
 ```
+
+`npm run package` builds for whichever OS it runs on; `package:mac` and `package:win` name one
+explicitly. Windows produces an NSIS installer (per-user, no admin rights) plus an unpacked folder.
+Neither build is code-signed, so Windows SmartScreen warns on first launch until you sign it.
 
 Layout: `src/main` (Electron main: run engine, MCP clients, providers, persistence), `src/preload` (IPC bridge), `src/renderer` (React editor), `src/shared` (graph format, events, IPC contract). Design notes live in `docs/superpowers/specs/`.

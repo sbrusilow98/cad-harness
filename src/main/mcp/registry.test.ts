@@ -130,17 +130,53 @@ describe('summarizeResult', () => {
 
 describe('buildStdioEnv', () => {
   it('extends PATH and lets config values win', () => {
-    const env = buildStdioEnv({ FOO: '2', PATH: '/custom' }, { PATH: '/bin', FOO: '1', HOME: '/Users/x' })
+    const env = buildStdioEnv({ FOO: '2', PATH: '/custom' }, { PATH: '/bin', FOO: '1', HOME: '/Users/x' }, 'darwin')
     expect(env).toEqual({ PATH: '/custom', FOO: '2', HOME: '/Users/x' })
   })
 
   it('appends tool directories to PATH', () => {
-    const env = buildStdioEnv(undefined, { PATH: '/bin', HOME: '/Users/x' })
+    const env = buildStdioEnv(undefined, { PATH: '/bin', HOME: '/Users/x' }, 'darwin')
     expect(env['PATH']).toBe('/bin:/usr/local/bin:/opt/homebrew/bin:/Users/x/.local/bin:/Users/x/.cargo/bin')
   })
 
   it('omits home-relative directories when HOME is unset and drops non-string values', () => {
-    const env = buildStdioEnv(undefined, { PATH: '', X: undefined })
+    const env = buildStdioEnv(undefined, { PATH: '', X: undefined }, 'darwin')
     expect(env).toEqual({ PATH: '/usr/local/bin:/opt/homebrew/bin' })
+  })
+
+  it('joins with the Windows separator and adds the Windows tool directories', () => {
+    const env = buildStdioEnv(
+      undefined,
+      {
+        Path: 'C:\\Windows',
+        USERPROFILE: 'C:\\Users\\x',
+        APPDATA: 'C:\\Users\\x\\AppData\\Roaming',
+        LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local',
+        ProgramFiles: 'C:\\Program Files'
+      },
+      'win32'
+    )
+    expect(env['Path']).toBe(
+      [
+        'C:\\Windows',
+        'C:\\Users\\x\\AppData\\Roaming\\npm',
+        'C:\\Users\\x\\AppData\\Local\\Microsoft\\WindowsApps',
+        'C:\\Program Files\\nodejs',
+        'C:\\Users\\x\\.local\\bin',
+        'C:\\Users\\x\\.cargo\\bin'
+      ].join(';')
+    )
+    // Not a second, competing spelling of the same variable.
+    expect(env['PATH']).toBeUndefined()
+  })
+
+  it('ignores HOME on Windows and skips directories whose base variable is unset', () => {
+    const env = buildStdioEnv(undefined, { Path: 'C:\\Windows', HOME: '/Users/x' }, 'win32')
+    expect(env['Path']).toBe('C:\\Windows')
+  })
+
+  it('replaces an inherited Windows variable that differs only in case', () => {
+    const env = buildStdioEnv({ PATH: 'C:\\custom' }, { Path: 'C:\\Windows' }, 'win32')
+    expect(env).toEqual({ PATH: 'C:\\custom' })
   })
 })

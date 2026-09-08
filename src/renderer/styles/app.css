@@ -45,10 +45,18 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 0 84px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   -webkit-app-region: drag;
+}
+/* Leave room for the window controls: macOS puts its traffic lights on the left, Windows draws
+   minimize/maximize/close as an overlay on the right. Linux keeps a normal frame and needs neither. */
+:root[data-platform='darwin'] .topbar {
+  padding-left: 84px;
+}
+:root[data-platform='win32'] .topbar {
+  padding-right: 148px;
 }
 .topbar > * {
   -webkit-app-region: no-drag;

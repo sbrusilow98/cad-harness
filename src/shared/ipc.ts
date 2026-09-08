@@ -54,7 +54,13 @@ export interface OpenedGraph {
   graph: Graph
 }
 
+/** `process.platform`, narrowed to the three we ship for. Spelled out rather than taken from
+ * `NodeJS.Platform` because the renderer's tsconfig does not pull in the node types. */
+export type PlatformId = 'darwin' | 'win32' | 'linux'
+
 export interface Api {
+  /** The host platform, so the renderer can label shortcuts and reserve window-control space. */
+  platform: PlatformId
   openGraph(): Promise<OpenedGraph | null>
   saveGraph(graph: Graph, path: string | null): Promise<string | null>
   getSettings(): Promise<Settings>
